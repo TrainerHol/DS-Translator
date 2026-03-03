@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CAPT-01**: App captures game screen via MediaProjection API with foreground service
 - [ ] **CAPT-02**: User can draw a persistent capture region on the game screen
-- [ ] **CAPT-03**: Continuous auto-capture mode with configurable interval and change detection
+- [x] **CAPT-03**: Continuous auto-capture mode with configurable interval and change detection
 - [x] **CAPT-04**: Manual capture mode via tap trigger
 - [x] **CAPT-05**: OCR preprocessing pipeline (crop, upscale, binarize, orientation detection)
 
@@ -19,7 +19,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **OCR-01**: Japanese text extraction via ML Kit Text Recognition v2 (bundled model)
 - [x] **OCR-02**: Pluggable OCR engine architecture (interface for swapping engines)
-- [ ] **OCR-03**: Text-change detection (skip re-processing identical frames/text)
+- [x] **OCR-03**: Text-change detection (skip re-processing identical frames/text)
 
 ### Translation
 
@@ -104,12 +104,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CAPT-01 | Phase 1 | Complete |
 | CAPT-02 | Phase 1 | Pending |
-| CAPT-03 | Phase 2 | Pending |
+| CAPT-03 | Phase 2 | Complete |
 | CAPT-04 | Phase 1 | Complete |
 | CAPT-05 | Phase 1 | Complete |
 | OCR-01 | Phase 1 | Complete |
 | OCR-02 | Phase 1 | Complete |
-| OCR-03 | Phase 2 | Pending |
+| OCR-03 | Phase 2 | Complete |
 | TRNS-01 | Phase 1 | Complete |
 | TRNS-02 | Phase 3 | Pending |
 | TRNS-03 | Phase 2 | Complete |
@@ -142,4 +142,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-03 after Plan 02-01 completion*
+*Last updated: 2026-03-03 after Plan 02-02 completion*

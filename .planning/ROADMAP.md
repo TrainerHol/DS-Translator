@@ -13,7 +13,7 @@ DS-Translator delivers a live Japanese game translator for the AYN Thor dual-scr
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Capture-to-Display Pipeline** - End-to-end screen capture, OCR, translation, and secondary screen display with manual capture and TTS
-- [ ] **Phase 2: Continuous Capture and Caching** - Change detection, auto-capture loop, translation caching, and scrollable history
+- [x] **Phase 2: Continuous Capture and Caching** - Change detection, auto-capture loop, translation caching, and scrollable history
 - [ ] **Phase 3: Learning Features** - WaniKani furigana, word segmentation, tap-to-lookup dictionary, JLPT indicators, and additional translation engines
 - [ ] **Phase 4: Profiles and Auto-Read** - Per-game profiles and dialog region auto-read via TTS
 - [ ] **Phase 5: Overlay Mode** - Floating bubble overlay with translation panel for dual-screen games (DS/3DS)
@@ -51,7 +51,7 @@ Plans:
 
 Plans:
 - [x] 02-01: Room database, translation cache (LRU + Room), history persistence, settings extensions (Wave 1)
-- [ ] 02-02: Continuous capture loop, change detection, expandable bubble menu, settings UI, end-to-end verification (Wave 2)
+- [x] 02-02: Continuous capture loop, change detection, expandable bubble menu, settings UI, end-to-end verification (Wave 2)
 
 ### Phase 3: Learning Features
 **Goal**: Users can learn Japanese while playing, with selective furigana based on their WaniKani level, interactive word segmentation, dictionary lookup, and JLPT difficulty indicators
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Capture-to-Display Pipeline | 2/3 | In progress | - |
-| 2. Continuous Capture and Caching | 1/2 | In progress | - |
+| 2. Continuous Capture and Caching | 2/2 | Complete | 2026-03-03 |
 | 3. Learning Features | 0/2 | Not started | - |
 | 4. Profiles and Auto-Read | 0/1 | Not started | - |
 | 5. Overlay Mode | 0/2 | Not started | - |

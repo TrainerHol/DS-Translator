@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 2 of 5 (Continuous Capture and Caching)
-Plan: 2 of 3 in current phase
-Status: Ready to execute Plan 02-02
-Last activity: 2026-03-03 -- Plan 02-01 executed (Room database, translation cache, settings extensions)
+Plan: 3 of 3 in current phase
+Status: Plan 02-02 complete, ready for next plan
+Last activity: 2026-03-03 -- Plan 02-02 executed (continuous capture loop, bubble menu, settings UI)
 
-Progress: [█████░░░░░] 30%
+Progress: [██████░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 8.3 min
-- Total execution time: 0.42 hours
+- Total plans completed: 4
+- Average duration: 10.3 min
+- Total execution time: 0.68 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 2 | 9 min | 4.5 min |
-| 2 | 1 | 16 min | 16 min |
+| 2 | 2 | 36 min | 18 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (4 min), 02-01 (16 min)
-- Trend: Slight increase (new dependencies installed)
+- Last 5 plans: 01-01 (5 min), 01-02 (4 min), 02-01 (16 min), 02-02 (20 min)
+- Trend: Phase 2 plans are longer due to more complex feature integration
 
 *Updated after each plan completion*
 
@@ -59,6 +59,9 @@ Recent decisions affecting current work:
 - [02-01]: Used androidx.collection.LruCache instead of android.util.LruCache for unit test compatibility
 - [02-01]: Cache key is exact Japanese source text string match (per locked architectural decision)
 - [02-01]: TranslationManager stores successful translations in cache, skips error messages
+- [02-02]: Used while(isActive) + delay(interval) pattern instead of deprecated ticker() for continuous capture loop
+- [02-02]: Bubble menu uses visibility toggles + ObjectAnimator instead of adding/removing WindowManager views
+- [02-02]: Added ContinuousActive branch to MainScreen.kt when expression for exhaustive sealed class matching
 
 ### Pending Todos
 
@@ -72,5 +75,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 02-01-PLAN.md
-Resume file: .planning/phases/02-continuous-capture-and-caching/02-02-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
+Resume file: .planning/phases/02-continuous-capture-and-caching/02-03-PLAN.md
