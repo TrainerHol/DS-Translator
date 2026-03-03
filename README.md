@@ -5,7 +5,11 @@ A dual screen translator for the AYN Thor
 
 APKs are built and published automatically when the version changes on the `main` branch.
 
-### How to change the version
+### Quick release (manual trigger)
+
+Go to **Actions** > **Build & Release APK** > **Run workflow**. This auto-bumps the version by `0.01` (e.g. `1.0` -> `1.01`), commits, builds, and creates a GitHub Release.
+
+### Manual version change
 
 Edit `app/build.gradle.kts` and update both `versionCode` and `versionName` in the `defaultConfig` block:
 
