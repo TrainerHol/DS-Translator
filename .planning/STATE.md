@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 1 of 5 (Capture-to-Display Pipeline)
-Plan: 2 of 3 in current phase
-Status: Executing -- Plan 01-02 complete, starting Plan 01-03
-Last activity: 2026-03-03 -- Plan 01-02 executed (capture service, pipeline orchestration, floating button, Presentation display)
+Plan: 3 of 3 in current phase
+Status: Checkpoint -- Plan 01-03 Tasks 1-2 complete, awaiting human verification (Task 3)
+Last activity: 2026-03-03 -- Plan 01-03 Tasks 1-2 executed (UI screens, settings, region setup, navigation)
 
 Progress: [████░░░░░░] 20%
 
@@ -53,6 +53,8 @@ Recent decisions affecting current work:
 - [01-02]: FloatingButtonService is not @AndroidEntryPoint -- creates SettingsRepository manually for simplicity
 - [01-02]: Added material-icons-extended dependency for VolumeUp icon
 - [01-02]: Used HorizontalDivider instead of deprecated Divider in Material3
+- [01-03]: Fixed AndroidManifest activity reference from .ui.MainActivity to .ui.main.MainActivity
+- [01-03]: Added CaptureService.screenCaptureManagerRef static accessor for region setup screenshot acquisition
 
 ### Pending Todos
 
@@ -66,5 +68,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 01-02-PLAN.md, ready to execute Plan 01-03
+Stopped at: Plan 01-03 checkpoint -- Tasks 1-2 committed (1b96564, 591a938), awaiting human verification of Task 3
 Resume file: .planning/phases/01-capture-to-display-pipeline/01-03-PLAN.md
