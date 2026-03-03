@@ -25,14 +25,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **TRNS-01**: DeepL translation API integration (JA→EN)
 - [ ] **TRNS-02**: Pluggable translation backend (OpenAI, Claude, local fallback)
-- [ ] **TRNS-03**: Translation caching in local database (same text returns cached result)
+- [x] **TRNS-03**: Translation caching in local database (same text returns cached result)
 - [x] **TRNS-04**: User-configurable API keys per translation engine
 
 ### Display
 
 - [x] **DISP-01**: Translation list rendered on secondary screen via Presentation API
 - [x] **DISP-02**: Each entry shows original Japanese, English translation, and play-audio button
-- [ ] **DISP-03**: Scrollable sentence history persisted as translation log
+- [x] **DISP-03**: Scrollable sentence history persisted as translation log
 - [x] **DISP-04**: Presentation display lifecycle tied to foreground service (survives app switches)
 
 ### Audio
@@ -60,7 +60,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Settings
 
 - [x] **SETT-01**: API key management for translation engines, OCR, and WaniKani
-- [ ] **SETT-02**: Capture interval and OCR engine configuration
+- [x] **SETT-02**: Capture interval and OCR engine configuration
 - [ ] **SETT-03**: Per-game profiles (capture region, engines, TTS settings saved per game)
 
 ## v2 Requirements
@@ -112,11 +112,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OCR-03 | Phase 2 | Pending |
 | TRNS-01 | Phase 1 | Complete |
 | TRNS-02 | Phase 3 | Pending |
-| TRNS-03 | Phase 2 | Pending |
+| TRNS-03 | Phase 2 | Complete |
 | TRNS-04 | Phase 1 | Complete |
 | DISP-01 | Phase 1 | Complete |
 | DISP-02 | Phase 1 | Complete |
-| DISP-03 | Phase 2 | Pending |
+| DISP-03 | Phase 2 | Complete |
 | DISP-04 | Phase 1 | Complete |
 | AUD-01 | Phase 1 | Complete |
 | AUD-02 | Phase 4 | Pending |
@@ -132,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OVLY-04 | Phase 5 | Pending |
 | OVLY-05 | Phase 5 | Pending |
 | SETT-01 | Phase 1 | Complete |
-| SETT-02 | Phase 2 | Pending |
+| SETT-02 | Phase 2 | Complete |
 | SETT-03 | Phase 4 | Pending |
 
 **Coverage:**
@@ -142,4 +142,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-03 after Plan 01-02 completion*
+*Last updated: 2026-03-03 after Plan 02-01 completion*

@@ -5,33 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Clean, non-intrusive live translation of Japanese games on dual-screen hardware -- game on top, translations on bottom, never interrupting gameplay.
-**Current focus:** Phase 1: Capture-to-Display Pipeline
+**Current focus:** Phase 2: Continuous Capture and Caching
 
 ## Current Position
 
-Phase: 1 of 5 (Capture-to-Display Pipeline)
-Plan: 3 of 3 in current phase
-Status: Checkpoint -- Plan 01-03 Tasks 1-2 complete, awaiting human verification (Task 3)
-Last activity: 2026-03-03 -- Plan 01-03 Tasks 1-2 executed (UI screens, settings, region setup, navigation)
+Phase: 2 of 5 (Continuous Capture and Caching)
+Plan: 2 of 3 in current phase
+Status: Ready to execute Plan 02-02
+Last activity: 2026-03-03 -- Plan 02-01 executed (Room database, translation cache, settings extensions)
 
-Progress: [████░░░░░░] 20%
+Progress: [█████░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 4.5 min
-- Total execution time: 0.15 hours
+- Total plans completed: 3
+- Average duration: 8.3 min
+- Total execution time: 0.42 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 2 | 9 min | 4.5 min |
+| 2 | 1 | 16 min | 16 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (4 min)
-- Trend: Stable
+- Last 5 plans: 01-01 (5 min), 01-02 (4 min), 02-01 (16 min)
+- Trend: Slight increase (new dependencies installed)
 
 *Updated after each plan completion*
 
@@ -55,6 +56,9 @@ Recent decisions affecting current work:
 - [01-02]: Used HorizontalDivider instead of deprecated Divider in Material3
 - [01-03]: Fixed AndroidManifest activity reference from .ui.MainActivity to .ui.main.MainActivity
 - [01-03]: Added CaptureService.screenCaptureManagerRef static accessor for region setup screenshot acquisition
+- [02-01]: Used androidx.collection.LruCache instead of android.util.LruCache for unit test compatibility
+- [02-01]: Cache key is exact Japanese source text string match (per locked architectural decision)
+- [02-01]: TranslationManager stores successful translations in cache, skips error messages
 
 ### Pending Todos
 
@@ -68,5 +72,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Plan 01-03 checkpoint -- Tasks 1-2 committed (1b96564, 591a938), awaiting human verification of Task 3
-Resume file: .planning/phases/01-capture-to-display-pipeline/01-03-PLAN.md
+Stopped at: Completed 02-01-PLAN.md
+Resume file: .planning/phases/02-continuous-capture-and-caching/02-02-PLAN.md

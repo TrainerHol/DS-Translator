@@ -50,7 +50,7 @@ Plans:
 **Plans**: 2 plans across 2 waves
 
 Plans:
-- [ ] 02-01: Room database, translation cache (LRU + Room), history persistence, settings extensions (Wave 1)
+- [x] 02-01: Room database, translation cache (LRU + Room), history persistence, settings extensions (Wave 1)
 - [ ] 02-02: Continuous capture loop, change detection, expandable bubble menu, settings UI, end-to-end verification (Wave 2)
 
 ### Phase 3: Learning Features
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Capture-to-Display Pipeline | 2/3 | In progress | - |
-| 2. Continuous Capture and Caching | 0/2 | Not started | - |
+| 2. Continuous Capture and Caching | 1/2 | In progress | - |
 | 3. Learning Features | 0/2 | Not started | - |
 | 4. Profiles and Auto-Read | 0/1 | Not started | - |
 | 5. Overlay Mode | 0/2 | Not started | - |
