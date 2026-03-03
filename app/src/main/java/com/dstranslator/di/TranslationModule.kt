@@ -1,5 +1,6 @@
 package com.dstranslator.di
 
+import com.dstranslator.data.cache.TranslationCache
 import com.dstranslator.data.settings.SettingsRepository
 import com.dstranslator.data.translation.DeepLTranslationEngine
 import com.dstranslator.data.translation.MlKitTranslationEngine
@@ -33,8 +34,9 @@ object TranslationModule {
     fun provideTranslationManager(
         deepLEngine: DeepLTranslationEngine,
         mlKitEngine: MlKitTranslationEngine,
-        settingsRepository: SettingsRepository
+        settingsRepository: SettingsRepository,
+        translationCache: TranslationCache
     ): TranslationManager {
-        return TranslationManager(deepLEngine, mlKitEngine, settingsRepository)
+        return TranslationManager(deepLEngine, mlKitEngine, settingsRepository, translationCache)
     }
 }

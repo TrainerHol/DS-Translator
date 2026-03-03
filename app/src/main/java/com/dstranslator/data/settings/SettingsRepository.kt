@@ -6,12 +6,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.dstranslator.domain.model.CaptureRegion
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -117,6 +119,26 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // --- Capture interval settings ---
+
+    suspend fun getCaptureIntervalMs(): Long {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_CAPTURE_INTERVAL] ?: DEFAULT_CAPTURE_INTERVAL_MS }
+            .first()
+    }
+
+    fun captureIntervalFlow(): Flow<Long> {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_CAPTURE_INTERVAL] ?: DEFAULT_CAPTURE_INTERVAL_MS }
+    }
+
+    suspend fun setCaptureIntervalMs(intervalMs: Long) {
+        val clamped = intervalMs.coerceIn(MIN_CAPTURE_INTERVAL_MS, MAX_CAPTURE_INTERVAL_MS)
+        context.dataStore.edit { prefs ->
+            prefs[PREF_CAPTURE_INTERVAL] = clamped
+        }
+    }
+
     companion object {
         private const val KEY_DEEPL_API = "deepl_api_key"
 
@@ -128,5 +150,10 @@ class SettingsRepository @Inject constructor(
         private val PREF_REGION_H = intPreferencesKey("capture_region_h")
         private val PREF_BUTTON_X = intPreferencesKey("floating_button_x")
         private val PREF_BUTTON_Y = intPreferencesKey("floating_button_y")
+        private val PREF_CAPTURE_INTERVAL = longPreferencesKey("capture_interval_ms")
+
+        const val DEFAULT_CAPTURE_INTERVAL_MS = 2000L
+        const val MIN_CAPTURE_INTERVAL_MS = 500L
+        const val MAX_CAPTURE_INTERVAL_MS = 10000L
     }
 }

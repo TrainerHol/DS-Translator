@@ -10,5 +10,6 @@ data class TranslationEntry(
     val id: String = UUID.randomUUID().toString(),
     val japanese: String,
     val english: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val sessionId: String? = null
 )

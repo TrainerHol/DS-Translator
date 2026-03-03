@@ -1,5 +1,6 @@
 package com.dstranslator.data.translation
 
+import com.dstranslator.data.cache.TranslationCache
 import com.dstranslator.data.settings.SettingsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -15,6 +16,7 @@ class TranslationManagerTest {
     private lateinit var deepLEngine: DeepLTranslationEngine
     private lateinit var mlKitEngine: MlKitTranslationEngine
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var translationCache: TranslationCache
     private lateinit var translationManager: TranslationManager
 
     @Before
@@ -22,14 +24,18 @@ class TranslationManagerTest {
         deepLEngine = mockk()
         mlKitEngine = mockk()
         settingsRepository = mockk()
+        translationCache = mockk(relaxed = true)
 
         coEvery { deepLEngine.name } returns "DeepL"
         coEvery { mlKitEngine.name } returns "ML Kit (On-Device)"
+        // Default: cache always misses so existing tests exercise the API path
+        coEvery { translationCache.get(any()) } returns null
 
         translationManager = TranslationManager(
             deepLEngine = deepLEngine,
             mlKitEngine = mlKitEngine,
-            settingsRepository = settingsRepository
+            settingsRepository = settingsRepository,
+            translationCache = translationCache
         )
     }
 
