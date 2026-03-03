@@ -1,0 +1,83 @@
+package com.dstranslator.ui.presentation
+
+import android.content.Context
+import android.os.Bundle
+import android.view.Display
+import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.dstranslator.domain.model.TranslationEntry
+import com.dstranslator.ui.theme.DsTranslatorPresentationTheme
+import kotlinx.coroutines.flow.StateFlow
+
+/**
+ * Presentation subclass that renders the translation list UI on the secondary display.
+ * Uses Compose via ComposeView for the dark-themed translation list.
+ *
+ * Lifecycle is tied to CaptureService -- created when service starts, dismissed when service stops.
+ *
+ * @param context The service context
+ * @param display The secondary display (AYN Thor bottom screen)
+ * @param translations StateFlow of accumulated translation entries to display
+ * @param onPlayAudio Callback when user taps play-audio on a translation entry
+ */
+class TranslationPresentation(
+    context: Context,
+    display: Display,
+    private val translations: StateFlow<List<TranslationEntry>>,
+    private val onPlayAudio: (String) -> Unit
+) : android.app.Presentation(context, display) {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val composeView = ComposeView(context).apply {
+            setContent {
+                DsTranslatorPresentationTheme {
+                    TranslationListScreen(
+                        translations = translations,
+                        onPlayAudio = onPlayAudio
+                    )
+                }
+            }
+        }
+
+        // Set up ViewTree owners required by ComposeView
+        val lifecycleOwner = PresentationLifecycleOwner()
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_CREATE)
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_START)
+        lifecycleOwner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_RESUME)
+
+        composeView.setViewTreeLifecycleOwner(lifecycleOwner)
+        composeView.setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+
+        setContentView(composeView)
+    }
+}
+
+/**
+ * Minimal LifecycleOwner and SavedStateRegistryOwner for Presentation's ComposeView.
+ * Presentation doesn't inherently provide these, but ComposeView requires them.
+ */
+private class PresentationLifecycleOwner :
+    androidx.lifecycle.LifecycleOwner,
+    androidx.savedstate.SavedStateRegistryOwner {
+
+    private val lifecycleRegistry = androidx.lifecycle.LifecycleRegistry(this)
+    private val savedStateRegistryController =
+        androidx.savedstate.SavedStateRegistryController.create(this)
+
+    init {
+        savedStateRegistryController.performRestore(null)
+    }
+
+    override val lifecycle: androidx.lifecycle.Lifecycle
+        get() = lifecycleRegistry
+
+    override val savedStateRegistry: androidx.savedstate.SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+
+    fun handleLifecycleEvent(event: androidx.lifecycle.Lifecycle.Event) {
+        lifecycleRegistry.handleLifecycleEvent(event)
+    }
+}
