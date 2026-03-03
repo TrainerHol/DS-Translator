@@ -3,8 +3,10 @@ package com.dstranslator.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.data.translation.TranslationManager
 import com.dstranslator.data.tts.TtsManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val ttsManager: TtsManager
+    private val ttsManager: TtsManager,
+    private val translationManager: TranslationManager
 ) : ViewModel() {
 
     /** Current DeepL API key (loaded from encrypted storage) */
@@ -37,12 +40,21 @@ class SettingsViewModel @Inject constructor(
     private val _availableVoices = MutableStateFlow<List<String>>(emptyList())
     val availableVoices: StateFlow<List<String>> = _availableVoices.asStateFlow()
 
+    /** Current capture interval in milliseconds */
+    private val _captureIntervalMs = MutableStateFlow(SettingsRepository.DEFAULT_CAPTURE_INTERVAL_MS)
+    val captureIntervalMs: StateFlow<Long> = _captureIntervalMs.asStateFlow()
+
+    /** Whether cache was recently cleared (for UI feedback) */
+    private val _cacheCleared = MutableStateFlow(false)
+    val cacheCleared: StateFlow<Boolean> = _cacheCleared.asStateFlow()
+
     init {
         viewModelScope.launch {
             _deepLApiKey.value = settingsRepository.getDeepLApiKey() ?: ""
             _ttsVoiceName.value = settingsRepository.getTtsVoiceName()
             _ocrEngineName.value = settingsRepository.getOcrEngineName() ?: "ML Kit"
             _availableVoices.value = ttsManager.getJapaneseVoices().map { it.name }
+            _captureIntervalMs.value = settingsRepository.getCaptureIntervalMs()
         }
     }
 
@@ -68,6 +80,25 @@ class SettingsViewModel @Inject constructor(
         _ocrEngineName.value = name
         viewModelScope.launch {
             settingsRepository.setOcrEngineName(name)
+        }
+    }
+
+    /** Save a new capture interval and persist it to settings. */
+    fun saveCaptureInterval(intervalMs: Long) {
+        _captureIntervalMs.value = intervalMs
+        viewModelScope.launch {
+            settingsRepository.setCaptureIntervalMs(intervalMs)
+        }
+    }
+
+    /** Clear the translation cache (both in-memory LRU and Room). Shows brief confirmation. */
+    fun clearTranslationCache() {
+        viewModelScope.launch {
+            translationManager.clearCache()
+            _cacheCleared.value = true
+            // Reset after 2 seconds
+            delay(2000)
+            _cacheCleared.value = false
         }
     }
 }

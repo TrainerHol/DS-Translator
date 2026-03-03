@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -22,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -51,6 +54,8 @@ fun SettingsScreen(
     val ttsVoiceName by viewModel.ttsVoiceName.collectAsState()
     val ocrEngineName by viewModel.ocrEngineName.collectAsState()
     val availableVoices by viewModel.availableVoices.collectAsState()
+    val captureIntervalMs by viewModel.captureIntervalMs.collectAsState()
+    val cacheCleared by viewModel.cacheCleared.collectAsState()
 
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -159,6 +164,61 @@ fun SettingsScreen(
                 OcrEngineDropdown(
                     selectedEngine = ocrEngineName,
                     onEngineSelected = { viewModel.saveOcrEngine(it) }
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Capture Section
+                Text(
+                    text = "Capture",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Capture interval: ${"%.1f".format(captureIntervalMs / 1000f)}s",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "How often the app captures and checks for new dialog in continuous mode",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+                Slider(
+                    value = captureIntervalMs.toFloat(),
+                    onValueChange = { viewModel.saveCaptureInterval(it.toLong()) },
+                    valueRange = 500f..10000f,
+                    steps = 19,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Cache Section
+                Text(
+                    text = "Cache",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = { viewModel.clearTranslationCache() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(if (cacheCleared) "Cache Cleared!" else "Clear Translation Cache")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Removes all cached translations. Future translations will require API calls.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
         }
