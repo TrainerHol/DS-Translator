@@ -16,7 +16,7 @@
         android:theme="@style/Theme.DSTranslator">
 
         <activity
-            android:name=".ui.MainActivity"
+            android:name=".ui.main.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.DSTranslator">
             <intent-filter>
