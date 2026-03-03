@@ -106,6 +106,9 @@ class CaptureService : Service() {
         windowManager.defaultDisplay.getRealMetrics(metrics)
         screenCaptureManager.setup(mediaProjection!!, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi)
 
+        // Expose capture manager for region setup screenshots
+        screenCaptureManagerRef = screenCaptureManager
+
         // Initialize TTS
         ttsManager.initialize()
 
@@ -142,6 +145,7 @@ class CaptureService : Service() {
         // Shutdown TTS
         ttsManager.shutdown()
 
+        screenCaptureManagerRef = null
         _pipelineState.value = PipelineState.Idle
 
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -313,6 +317,7 @@ class CaptureService : Service() {
 
         ttsManager.shutdown()
 
+        screenCaptureManagerRef = null
         serviceScope.cancel()
     }
 
@@ -336,5 +341,9 @@ class CaptureService : Service() {
         /** Accumulated translations observable by other components */
         private val _translations = MutableStateFlow<List<TranslationEntry>>(emptyList())
         val translations: StateFlow<List<TranslationEntry>> = _translations.asStateFlow()
+
+        /** ScreenCaptureManager reference for region setup screenshot acquisition */
+        var screenCaptureManagerRef: ScreenCaptureManager? = null
+            private set
     }
 }
