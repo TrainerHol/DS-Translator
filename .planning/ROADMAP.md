@@ -47,11 +47,11 @@ Plans:
   3. Previously translated text returns instantly from cache without hitting the translation API
   4. Bottom screen shows a scrollable history of all translations from the current session, persisted as a translation log
   5. User can configure the capture interval from settings
-**Plans**: TBD
+**Plans**: 2 plans across 2 waves
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01: Room database, translation cache (LRU + Room), history persistence, settings extensions (Wave 1)
+- [ ] 02-02: Continuous capture loop, change detection, expandable bubble menu, settings UI, end-to-end verification (Wave 2)
 
 ### Phase 3: Learning Features
 **Goal**: Users can learn Japanese while playing, with selective furigana based on their WaniKani level, interactive word segmentation, dictionary lookup, and JLPT difficulty indicators
