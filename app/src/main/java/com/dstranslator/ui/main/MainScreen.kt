@@ -216,6 +216,18 @@ private fun StatusSection(pipelineState: PipelineState) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
             }
+            is PipelineState.ContinuousActive -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Continuous capture active",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             is PipelineState.Error -> {
                 Text(
                     text = pipelineState.message,

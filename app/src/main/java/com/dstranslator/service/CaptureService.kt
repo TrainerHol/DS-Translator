@@ -26,14 +26,20 @@ import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.TranslationEntry
 import com.dstranslator.ui.presentation.TranslationPresentation
 import dagger.hilt.android.AndroidEntryPoint
+import com.dstranslator.data.db.TranslationHistoryDao
+import com.dstranslator.data.db.TranslationHistoryEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -56,10 +62,16 @@ class CaptureService : Service() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var screenCaptureManager: ScreenCaptureManager
     @Inject lateinit var ocrPreprocessor: OcrPreprocessor
+    @Inject lateinit var translationHistoryDao: TranslationHistoryDao
 
     private var mediaProjection: MediaProjection? = null
     private var presentation: TranslationPresentation? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    private var continuousCaptureJob: Job? = null
+    private var previousOcrText: String = ""
+    private var currentSessionId: String = UUID.randomUUID().toString()
+    private var historyCollectionJob: Job? = null
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -75,6 +87,8 @@ class CaptureService : Service() {
             ACTION_START -> handleStart(intent)
             ACTION_CAPTURE -> handleCapture()
             ACTION_STOP -> handleStop()
+            ACTION_START_CONTINUOUS -> startContinuousCapture()
+            ACTION_STOP_CONTINUOUS -> stopContinuousCapture()
         }
         return START_NOT_STICKY
     }
@@ -115,6 +129,26 @@ class CaptureService : Service() {
         // Set up Presentation on secondary display
         setupPresentation()
 
+        // Generate a new session ID for this capture session
+        currentSessionId = UUID.randomUUID().toString()
+        _currentSessionId.value = currentSessionId
+
+        // Load existing history for this session (if service was recreated)
+        historyCollectionJob?.cancel()
+        historyCollectionJob = serviceScope.launch {
+            translationHistoryDao.getBySession(currentSessionId).collect { historyEntries ->
+                val entries = historyEntries.map { entity ->
+                    TranslationEntry(
+                        japanese = entity.sourceText,
+                        english = entity.translatedText,
+                        timestamp = entity.timestamp,
+                        sessionId = entity.sessionId
+                    )
+                }
+                _translations.value = entries
+            }
+        }
+
         // Start floating button service
         val buttonIntent = Intent(this, FloatingButtonService::class.java)
         startService(buttonIntent)
@@ -129,6 +163,10 @@ class CaptureService : Service() {
     }
 
     private fun handleStop() {
+        // Stop continuous capture if running
+        stopContinuousCapture()
+        historyCollectionJob?.cancel()
+
         // Stop floating button service
         stopService(Intent(this, FloatingButtonService::class.java))
 
@@ -245,8 +283,9 @@ class CaptureService : Service() {
      * 1. Capture screenshot
      * 2. Preprocess bitmap (crop, upscale, grayscale)
      * 3. Run OCR to extract text blocks
-     * 4. Translate each text block
-     * 5. Append results to translations StateFlow
+     * 4. Change detection: skip if identical to previous OCR text
+     * 5. Translate each text block (cache-first via TranslationManager)
+     * 6. Persist to Room history (Flow collection updates translations StateFlow)
      */
     private suspend fun captureAndTranslate() {
         try {
@@ -254,7 +293,7 @@ class CaptureService : Service() {
 
             val bitmap = screenCaptureManager.acquireScreenshot()
             if (bitmap == null) {
-                _pipelineState.value = PipelineState.Error("Failed to capture screenshot")
+                _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Error("Failed to capture screenshot")
                 return
             }
 
@@ -264,24 +303,47 @@ class CaptureService : Service() {
             val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
 
             val textBlocks = ocrEngine.recognize(preprocessed)
+            val currentText = textBlocks.joinToString("\n") { it.text }.trim()
 
-            // Translate each text block into a separate entry
+            // Change detection: skip if text is identical to previous (consecutive identical = always skip)
+            if (currentText == previousOcrText || currentText.isBlank()) {
+                _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
+                // Recycle bitmaps
+                if (preprocessed !== bitmap) {
+                    bitmap.recycle()
+                }
+                preprocessed.recycle()
+                return
+            }
+            previousOcrText = currentText
+
+            // Translate each text block and persist to Room history
             val newEntries = textBlocks.mapNotNull { block ->
                 if (block.text.isBlank()) return@mapNotNull null
                 val translation = translationManager.translate(block.text)
-                TranslationEntry(
+                val entry = TranslationEntry(
                     japanese = block.text,
-                    english = translation
+                    english = translation,
+                    sessionId = currentSessionId
                 )
+
+                // Persist to history (per-session, persisted to Room)
+                translationHistoryDao.insert(
+                    TranslationHistoryEntity(
+                        sessionId = currentSessionId,
+                        sourceText = block.text,
+                        translatedText = translation,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+
+                entry
             }
 
-            if (newEntries.isNotEmpty()) {
-                val currentList = _translations.value.toMutableList()
-                currentList.addAll(newEntries)
-                _translations.value = currentList
-            }
+            // Room Flow collection (historyCollectionJob) automatically updates _translations
+            // No manual list update needed
 
-            _pipelineState.value = PipelineState.Done
+            _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
 
             // Recycle bitmaps
             if (preprocessed !== bitmap) {
@@ -292,6 +354,36 @@ class CaptureService : Service() {
             Log.e(TAG, "Pipeline error", e)
             _pipelineState.value = PipelineState.Error("Pipeline error: ${e.message}")
         }
+    }
+
+    /**
+     * Start continuous capture mode. Cancels any existing continuous job first.
+     * Uses while(isActive) + delay(interval) pattern to prevent overlapping captures.
+     */
+    private fun startContinuousCapture() {
+        continuousCaptureJob?.cancel()
+        previousOcrText = ""  // Reset change detection
+        _isContinuousActive.value = true
+        _currentSessionId.value = currentSessionId
+
+        continuousCaptureJob = serviceScope.launch {
+            _pipelineState.value = PipelineState.ContinuousActive
+            while (isActive) {
+                captureAndTranslate()
+                val intervalMs = settingsRepository.getCaptureIntervalMs()
+                delay(intervalMs)
+            }
+        }
+    }
+
+    /**
+     * Stop continuous capture mode and return to idle.
+     */
+    private fun stopContinuousCapture() {
+        continuousCaptureJob?.cancel()
+        continuousCaptureJob = null
+        _isContinuousActive.value = false
+        _pipelineState.value = PipelineState.Idle
     }
 
     /**
@@ -327,6 +419,8 @@ class CaptureService : Service() {
         const val ACTION_START = "com.dstranslator.action.START"
         const val ACTION_CAPTURE = "com.dstranslator.action.CAPTURE"
         const val ACTION_STOP = "com.dstranslator.action.STOP"
+        const val ACTION_START_CONTINUOUS = "com.dstranslator.action.START_CONTINUOUS"
+        const val ACTION_STOP_CONTINUOUS = "com.dstranslator.action.STOP_CONTINUOUS"
 
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_DATA = "extra_data"
@@ -341,6 +435,14 @@ class CaptureService : Service() {
         /** Accumulated translations observable by other components */
         private val _translations = MutableStateFlow<List<TranslationEntry>>(emptyList())
         val translations: StateFlow<List<TranslationEntry>> = _translations.asStateFlow()
+
+        /** Whether continuous capture mode is currently active */
+        private val _isContinuousActive = MutableStateFlow(false)
+        val isContinuousActive: StateFlow<Boolean> = _isContinuousActive.asStateFlow()
+
+        /** Current session ID for history grouping */
+        private val _currentSessionId = MutableStateFlow<String?>(null)
+        val currentSessionIdFlow: StateFlow<String?> = _currentSessionId.asStateFlow()
 
         /** ScreenCaptureManager reference for region setup screenshot acquisition */
         var screenCaptureManagerRef: ScreenCaptureManager? = null

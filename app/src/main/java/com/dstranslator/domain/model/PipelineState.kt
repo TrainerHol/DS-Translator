@@ -17,6 +17,9 @@ sealed class PipelineState {
     /** Pipeline completed successfully */
     data object Done : PipelineState()
 
+    /** Continuous capture mode is active and running */
+    data object ContinuousActive : PipelineState()
+
     /** Pipeline encountered an error */
     data class Error(val message: String) : PipelineState()
 }
