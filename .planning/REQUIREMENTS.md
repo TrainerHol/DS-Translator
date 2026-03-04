@@ -24,7 +24,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Translation
 
 - [x] **TRNS-01**: DeepL translation API integration (JA→EN)
-- [ ] **TRNS-02**: Pluggable translation backend (OpenAI, Claude, local fallback)
+- [x] **TRNS-02**: Pluggable translation backend (OpenAI, Claude, local fallback)
 - [x] **TRNS-03**: Translation caching in local database (same text returns cached result)
 - [x] **TRNS-04**: User-configurable API keys per translation engine
 
@@ -111,7 +111,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OCR-02 | Phase 1 | Complete |
 | OCR-03 | Phase 2 | Complete |
 | TRNS-01 | Phase 1 | Complete |
-| TRNS-02 | Phase 3 | Pending |
+| TRNS-02 | Phase 3 | Complete |
 | TRNS-03 | Phase 2 | Complete |
 | TRNS-04 | Phase 1 | Complete |
 | DISP-01 | Phase 1 | Complete |
