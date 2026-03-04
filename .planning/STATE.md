@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-03T23:13:15.258Z"
+status: in-progress
+last_updated: "2026-03-04T01:12:26Z"
 progress:
-  total_phases: 2
+  total_phases: 5
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 4
+  total_plans: 12
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Clean, non-intrusive live translation of Japanese games on dual-screen hardware -- game on top, translations on bottom, never interrupting gameplay.
-**Current focus:** Phase 2: Continuous Capture and Caching
+**Current focus:** Phase 3: Learning Features
 
 ## Current Position
 
-Phase: 2 of 5 (Continuous Capture and Caching)
-Plan: 3 of 3 in current phase
-Status: Plan 02-02 complete, ready for next plan
-Last activity: 2026-03-03 -- Plan 02-02 executed (continuous capture loop, bubble menu, settings UI)
+Phase: 3 of 5 (Learning Features)
+Plan: 3 of 4 in current phase
+Status: Plan 03-02 complete, ready for next plan
+Last activity: 2026-03-04 -- Plan 03-02 executed (domain models, Sudachi segmenter integration)
 
-Progress: [██████░░░░] 40%
+Progress: [██████░░░░] 42%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 10.3 min
-- Total execution time: 0.68 hours
+- Total plans completed: 5
+- Average duration: 9 min
+- Total execution time: 0.73 hours
 
 **By Phase:**
 
@@ -42,10 +42,11 @@ Progress: [██████░░░░] 40%
 |-------|-------|-------|----------|
 | 1 | 2 | 9 min | 4.5 min |
 | 2 | 2 | 36 min | 18 min |
+| 3 | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (4 min), 02-01 (16 min), 02-02 (20 min)
-- Trend: Phase 2 plans are longer due to more complex feature integration
+- Last 5 plans: 01-01 (5 min), 01-02 (4 min), 02-01 (16 min), 02-02 (20 min), 03-02 (3 min)
+- Trend: Phase 3 plan 02 was fast (domain models + segmenter wrapper, no heavy integration)
 
 *Updated after each plan completion*
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [02-02]: Used while(isActive) + delay(interval) pattern instead of deprecated ticker() for continuous capture loop
 - [02-02]: Bubble menu uses visibility toggles + ObjectAnimator instead of adding/removing WindowManager views
 - [02-02]: Added ContinuousActive branch to MainScreen.kt when expression for exhaustive sealed class matching
+- [03-02]: Sudachi dictionary copied from assets to filesDir on first launch (required for memory-mapped MappedByteBuffer access)
+- [03-02]: Unit tests verify contract only; integration tests @Ignore for on-device execution with real dictionary
 
 ### Pending Todos
 
@@ -83,10 +86,10 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 1]: AYN Thor bottom screen must be confirmed as DISPLAY_CATEGORY_PRESENTATION -- research says yes (MEDIUM confidence) but needs hardware verification.
-- [Phase 3]: Kuromoji morphological analysis library size and performance on Android is unverified -- may need lighter alternative.
+- [Phase 3]: Sudachi Java morphological analyzer is untested on Android -- must verify compatibility early in research phase. Fallback to Kuromoji if needed. APK size (~72MB dictionary) confirmed acceptable by user.
 
 ## Session Continuity
 
-Last session: 2026-03-03
-Stopped at: Completed 02-02-PLAN.md
-Resume file: .planning/phases/02-continuous-capture-and-caching/02-03-PLAN.md
+Last session: 2026-03-04
+Stopped at: Completed 03-02-PLAN.md
+Resume file: .planning/phases/03-learning-features/03-03-PLAN.md

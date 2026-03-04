@@ -66,7 +66,7 @@ Plans:
 
 Plans:
 - [ ] 03-01: OpenAI and Claude translation engines, TranslationManager engine selection, SettingsRepository extensions (Wave 1)
-- [ ] 03-02: Domain models (SegmentedWord, DictionaryResult, FuriganaSegment), Sudachi morphological analyzer integration (Wave 1)
+- [x] 03-02: Domain models (SegmentedWord, DictionaryResult, FuriganaSegment), Sudachi morphological analyzer integration (Wave 1)
 - [ ] 03-03: JMdict dictionary database, WaniKani API sync and local cache, Room entities and repositories (Wave 1)
 - [ ] 03-04: Presentation UI integration -- FuriganaText, JlptIndicator, DictionaryPopup, segmented word display, settings UI (Wave 2)
 
@@ -106,6 +106,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Capture-to-Display Pipeline | 2/3 | In progress | - |
 | 2. Continuous Capture and Caching | 2/2 | Complete | 2026-03-03 |
-| 3. Learning Features | 0/4 | Not started | - |
+| 3. Learning Features | 1/4 | In progress | - |
 | 4. Profiles and Auto-Read | 0/1 | Not started | - |
 | 5. Overlay Mode | 0/2 | Not started | - |
