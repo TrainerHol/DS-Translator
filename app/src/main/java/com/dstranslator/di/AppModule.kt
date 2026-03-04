@@ -2,10 +2,15 @@ package com.dstranslator.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.dstranslator.data.cache.TranslationCache
 import com.dstranslator.data.db.AppDatabase
 import com.dstranslator.data.db.CachedTranslationDao
+import com.dstranslator.data.db.JMdictDao
+import com.dstranslator.data.db.JMdictDatabase
 import com.dstranslator.data.db.TranslationHistoryDao
+import com.dstranslator.data.db.WaniKaniDao
 import com.dstranslator.data.settings.SettingsRepository
 import com.dstranslator.data.tts.TtsManager
 import dagger.Module
@@ -13,11 +18,26 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS wanikani_assignments (
+                    subject_id INTEGER NOT NULL PRIMARY KEY,
+                    subject_type TEXT NOT NULL,
+                    srs_stage INTEGER NOT NULL,
+                    passed_at TEXT,
+                    kanji_character TEXT
+                )
+            """)
+        }
+    }
 
     @Provides
     @Singleton
@@ -45,7 +65,7 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "ds_translator.db"
-        ).fallbackToDestructiveMigration().build()
+        ).addMigrations(MIGRATION_1_2).build()
     }
 
     @Provides
@@ -62,7 +82,39 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideWaniKaniDao(db: AppDatabase): WaniKaniDao {
+        return db.waniKaniDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideTranslationCache(dao: CachedTranslationDao): TranslationCache {
         return TranslationCache(dao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideJMdictDatabase(
+        @ApplicationContext context: Context
+    ): JMdictDatabase {
+        return Room.databaseBuilder(
+            context,
+            JMdictDatabase::class.java,
+            "jmdict.db"
+        ).createFromAsset("databases/jmdict.db")
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideJMdictDao(db: JMdictDatabase): JMdictDao {
+        return db.jmdictDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder().build()
     }
 }
