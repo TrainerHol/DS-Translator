@@ -7,12 +7,14 @@ import androidx.room.RoomDatabase
     entities = [
         CachedTranslationEntity::class,
         TranslationHistoryEntity::class,
-        WaniKaniAssignmentEntity::class
+        WaniKaniAssignmentEntity::class,
+        ProfileEntity::class
     ],
-    version = 2
+    version = 3
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedTranslationDao(): CachedTranslationDao
     abstract fun translationHistoryDao(): TranslationHistoryDao
     abstract fun waniKaniDao(): WaniKaniDao
+    abstract fun profileDao(): ProfileDao
 }

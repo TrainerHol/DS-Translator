@@ -227,7 +227,8 @@ class SettingsRepository @Inject constructor(
                     width = obj.getInt("width"),
                     height = obj.getInt("height"),
                     id = obj.optString("id", "default"),
-                    label = obj.optString("label", "")
+                    label = obj.optString("label", ""),
+                    autoRead = obj.optBoolean("autoRead", false)
                 )
             }
         } catch (e: Exception) {
@@ -248,6 +249,7 @@ class SettingsRepository @Inject constructor(
                 put("height", region.height)
                 put("id", region.id)
                 put("label", region.label)
+                put("autoRead", region.autoRead)
             }
             array.put(obj)
         }

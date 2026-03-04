@@ -9,5 +9,6 @@ data class TranslationHistoryEntity(
     val sessionId: String,
     val sourceText: String,
     val translatedText: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val profileId: Long? = null
 )

@@ -13,6 +13,12 @@ interface TranslationHistoryDao {
     @Query("SELECT * FROM translation_history WHERE sessionId = :sessionId ORDER BY timestamp ASC")
     fun getBySession(sessionId: String): Flow<List<TranslationHistoryEntity>>
 
+    @Query("SELECT * FROM translation_history WHERE profileId = :profileId ORDER BY timestamp DESC")
+    fun getByProfile(profileId: Long): Flow<List<TranslationHistoryEntity>>
+
+    @Query("DELETE FROM translation_history WHERE profileId = :profileId")
+    suspend fun deleteByProfile(profileId: Long)
+
     @Query("DELETE FROM translation_history")
     suspend fun deleteAll()
 }

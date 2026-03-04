@@ -9,6 +9,7 @@ import com.dstranslator.data.db.AppDatabase
 import com.dstranslator.data.db.CachedTranslationDao
 import com.dstranslator.data.db.JMdictDao
 import com.dstranslator.data.db.JMdictDatabase
+import com.dstranslator.data.db.ProfileDao
 import com.dstranslator.data.db.TranslationHistoryDao
 import com.dstranslator.data.db.WaniKaniDao
 import com.dstranslator.data.settings.SettingsRepository
@@ -39,6 +40,25 @@ object AppModule {
         }
     }
 
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS profiles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    name TEXT NOT NULL,
+                    isDefault INTEGER NOT NULL DEFAULT 0,
+                    settingsJson TEXT NOT NULL,
+                    captureRegionsJson TEXT NOT NULL,
+                    autoReadEnabled INTEGER NOT NULL DEFAULT 0,
+                    autoReadFlushMode INTEGER NOT NULL DEFAULT 1,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("ALTER TABLE translation_history ADD COLUMN profileId INTEGER DEFAULT NULL")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSettingsRepository(
@@ -65,7 +85,7 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "ds_translator.db"
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 
     @Provides
@@ -84,6 +104,12 @@ object AppModule {
     @Singleton
     fun provideWaniKaniDao(db: AppDatabase): WaniKaniDao {
         return db.waniKaniDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideProfileDao(db: AppDatabase): ProfileDao {
+        return db.profileDao()
     }
 
     @Provides

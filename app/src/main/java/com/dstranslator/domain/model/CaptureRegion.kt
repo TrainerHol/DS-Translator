@@ -10,6 +10,7 @@ package com.dstranslator.domain.model
  * @param height Height in pixels
  * @param id Unique identifier for this region (for multi-region support)
  * @param label User-facing label (e.g., "Dialogue", "Menu")
+ * @param autoRead Whether captured text in this region should be automatically read aloud via TTS
  */
 data class CaptureRegion(
     val x: Int,
@@ -17,5 +18,6 @@ data class CaptureRegion(
     val width: Int,
     val height: Int,
     val id: String = "default",
-    val label: String = ""
+    val label: String = "",
+    val autoRead: Boolean = false
 )
