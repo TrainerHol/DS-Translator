@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-04T05:50:08Z"
-last_activity: 2026-03-04 -- Plan 04-01 executed (profile data layer, auto-read settings, TtsManager queue mode)
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-04T05:58:43Z"
+last_activity: 2026-03-04 -- Plan 04-02 executed (RegionEditOverlay, bubble menu buttons, auto-read hook)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 12
-  completed_plans: 8
-  percent: 67
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 4 of 5 (Profiles and Auto-Read)
-Plan: 2 of 3 in current phase
-Status: Plan 04-01 complete (profile data layer), ready for plan 04-02
-Last activity: 2026-03-04 -- Plan 04-01 executed (profile data layer, auto-read settings, TtsManager queue mode)
+Plan: 3 of 3 in current phase
+Status: Plan 04-02 complete (service layer), ready for plan 04-03
+Last activity: 2026-03-04 -- Plan 04-02 executed (RegionEditOverlay, bubble menu buttons, auto-read hook)
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 9 min
-- Total execution time: 1.15 hours
+- Total execution time: 1.23 hours
 
 **By Phase:**
 
@@ -46,16 +46,17 @@ Progress: [███████░░░] 67%
 | 1 | 2 | 9 min | 4.5 min |
 | 2 | 2 | 36 min | 18 min |
 | 3 | 3 | 22 min | 7.3 min |
-| 4 | 1 | 6 min | 6 min |
+| 4 | 2 | 11 min | 5.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (20 min), 03-01 (9 min), 03-02 (3 min), 03-03 (10 min), 04-01 (6 min)
-- Trend: Data layer plans consistently fast (6-10 min)
+- Last 5 plans: 03-01 (9 min), 03-02 (3 min), 03-03 (10 min), 04-01 (6 min), 04-02 (5 min)
+- Trend: Service layer plans fast when data layer is solid (5-6 min)
 
 *Updated after each plan completion*
 | Phase 03 P01 | 9 | 2 tasks | 8 files |
 | Phase 03 P03 | 10 | 2 tasks | 17 files |
 | Phase 04 P01 | 6 | 2 tasks | 14 files |
+| Phase 04 P02 | 5 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,10 @@ Recent decisions affecting current work:
 - [04-01]: API keys excluded from profiles -- profiles store engine/config settings only, keys are global
 - [04-01]: Atomic single DataStore.edit block for profile loading prevents partial state corruption
 - [04-01]: CaptureRegion.autoRead defaults to false for backward compat with existing serialized data
+- [04-02]: AutoReadHelper extracted as pure object for unit testability of auto-read decision logic
+- [04-02]: Canvas-drawn overlay controls (no inflated XML) for Service-context RegionEditOverlay
+- [04-02]: Permission guard uses pendingRegionEdit flag + pipelineState observer for deferred overlay opening
+- [04-02]: Per-region previousRegionTexts map supplements (not replaces) global previousOcrText
 
 ### Pending Todos
 
@@ -108,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T05:50:08Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-profiles-and-auto-read/04-02-PLAN.md
+Last session: 2026-03-04T05:58:43Z
+Stopped at: Completed 04-02-PLAN.md
+Resume file: .planning/phases/04-profiles-and-auto-read/04-03-PLAN.md
