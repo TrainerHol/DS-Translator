@@ -103,6 +103,9 @@ dependencies {
     // OkHttp
     implementation(libs.okhttp)
 
+    // Sudachi (Japanese morphological analysis)
+    implementation(libs.sudachi)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
