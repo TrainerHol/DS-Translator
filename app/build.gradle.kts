@@ -20,6 +20,27 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val isCi = System.getenv("CI")?.equals("true", ignoreCase = true) == true
+    if (isCi) {
+        signingConfigs {
+            create("release") {
+                val keystorePath =
+                    requireNotNull(System.getenv("ANDROID_KEYSTORE_PATH")) { "Missing ANDROID_KEYSTORE_PATH" }
+                val keystorePassword =
+                    requireNotNull(System.getenv("ANDROID_KEYSTORE_PASSWORD")) { "Missing ANDROID_KEYSTORE_PASSWORD" }
+                val keyAlias =
+                    requireNotNull(System.getenv("ANDROID_KEY_ALIAS")) { "Missing ANDROID_KEY_ALIAS" }
+                val keyPassword =
+                    requireNotNull(System.getenv("ANDROID_KEY_PASSWORD")) { "Missing ANDROID_KEY_PASSWORD" }
+
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -27,6 +48,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (isCi) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
