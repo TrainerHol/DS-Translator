@@ -85,7 +85,7 @@ Plans:
 - [ ] 04-03-PLAN.md -- UI layer: SettingsScreen profiles section, SettingsViewModel profile CRUD, auto-read settings UI, NavGraph deep link (Wave 2)
 
 ### Phase 5: Overlay Mode
-**Goal**: Users playing dual-screen games (DS/3DS) where the bottom screen shows game content can access translations via a floating overlay on the game screen
+**Goal**: Users playing dual-screen games (DS/3DS) where the bottom screen shows game content can access translations via a floating overlay on the game screen, with two display modes (overlay-on-source labels and scrollable panel) and full touch passthrough control
 **Depends on**: Phase 1 (uses same pipeline; does not require Phases 2-4)
 **Requirements**: OVLY-01, OVLY-02, OVLY-03, OVLY-04, OVLY-05
 **Success Criteria** (what must be TRUE):
@@ -93,11 +93,12 @@ Plans:
   2. Tapping the bubble expands a translation panel showing detected words/phrases as interactive buttons with translation and audio
   3. When the overlay panel is collapsed, touch events pass through to the game without interference
   4. The overlay does not appear in its own screen capture (no OCR feedback loop)
-**Plans**: TBD
+**Plans**: 3 plans across 3 waves
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md -- Domain foundation: OverlayMode/OcrResult/OverlayConfig models, coordinate mapper, touch state machine, PresentationLifecycleOwner extraction, CaptureService OcrResult StateFlow, overlay settings (Wave 1)
+- [ ] 05-02-PLAN.md -- Overlay display system: OverlayPanelView (drag/resize/pin/lock), OverlaySourceLabels (coordinate-mapped), OverlayTooltip, OverlayDisplayManager (Wave 2)
+- [ ] 05-03-PLAN.md -- Integration: bubble menu grid layout (8 buttons), FloatingButtonService overlay mode toggle and screen switch, Presentation dismiss/restore, end-to-end verification (Wave 3)
 
 ## Progress
 
@@ -110,4 +111,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Continuous Capture and Caching | 2/2 | Complete | 2026-03-03 |
 | 3. Learning Features | 1/4 | In progress | - |
 | 4. Profiles and Auto-Read | 0/3 | Not started | - |
-| 5. Overlay Mode | 0/2 | Not started | - |
+| 5. Overlay Mode | 0/3 | Not started | - |
