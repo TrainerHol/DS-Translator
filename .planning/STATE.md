@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-04T05:58:43Z"
-last_activity: 2026-03-04 -- Plan 04-02 executed (RegionEditOverlay, bubble menu buttons, auto-read hook)
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-04T06:08:40Z"
+last_activity: 2026-03-04 -- Plan 04-03 executed (profiles UI, auto-read settings, deep link, intent handling)
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 9
-  percent: 75
+  completed_plans: 10
+  percent: 83
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Clean, non-intrusive live translation of Japanese games on dual-screen hardware -- game on top, translations on bottom, never interrupting gameplay.
-**Current focus:** Phase 4: Profiles and Auto-Read
+**Current focus:** Phase 5: Overlay Mode (Phase 4 complete)
 
 ## Current Position
 
-Phase: 4 of 5 (Profiles and Auto-Read)
-Plan: 3 of 3 in current phase
-Status: Plan 04-02 complete (service layer), ready for plan 04-03
-Last activity: 2026-03-04 -- Plan 04-02 executed (RegionEditOverlay, bubble menu buttons, auto-read hook)
+Phase: 5 of 5 (Overlay Mode)
+Plan: 1 of ? in current phase
+Status: Phase 4 complete (all 3 plans), ready for Phase 5
+Last activity: 2026-03-04 -- Plan 04-03 executed (profiles UI, auto-read settings, deep link, intent handling)
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 9 min
-- Total execution time: 1.23 hours
+- Total execution time: 1.32 hours
 
 **By Phase:**
 
@@ -46,17 +46,18 @@ Progress: [████████░░] 75%
 | 1 | 2 | 9 min | 4.5 min |
 | 2 | 2 | 36 min | 18 min |
 | 3 | 3 | 22 min | 7.3 min |
-| 4 | 2 | 11 min | 5.5 min |
+| 4 | 3 | 16 min | 5.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (9 min), 03-02 (3 min), 03-03 (10 min), 04-01 (6 min), 04-02 (5 min)
-- Trend: Service layer plans fast when data layer is solid (5-6 min)
+- Last 5 plans: 03-02 (3 min), 03-03 (10 min), 04-01 (6 min), 04-02 (5 min), 04-03 (5 min)
+- Trend: Phase 4 UI/service plans consistently fast (5-6 min)
 
 *Updated after each plan completion*
 | Phase 03 P01 | 9 | 2 tasks | 8 files |
 | Phase 03 P03 | 10 | 2 tasks | 17 files |
 | Phase 04 P01 | 6 | 2 tasks | 14 files |
 | Phase 04 P02 | 5 | 2 tasks | 6 files |
+| Phase 04 P03 | 5 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,10 @@ Recent decisions affecting current work:
 - [04-02]: Canvas-drawn overlay controls (no inflated XML) for Service-context RegionEditOverlay
 - [04-02]: Permission guard uses pendingRegionEdit flag + pipelineState observer for deferred overlay opening
 - [04-02]: Per-region previousRegionTexts map supplements (not replaces) global previousOcrText
+- [04-03]: Profiles section at TOP of settings page for prominence and easy deep-link scrolling
+- [04-03]: singleTask launchMode on MainActivity for OPEN_PROFILES intent reuse
+- [04-03]: NavGraph parameterized route settings?section={section} with empty default for backward compat
+- [04-03]: ProfileCard uses three-dot DropdownMenu (not long press) for discoverable actions
 
 ### Pending Todos
 
@@ -113,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T05:58:43Z
-Stopped at: Completed 04-02-PLAN.md
-Resume file: .planning/phases/04-profiles-and-auto-read/04-03-PLAN.md
+Last session: 2026-03-04T06:08:40.201Z
+Stopped at: Completed 04-03-PLAN.md
+Resume file: Phase 5 planning needed
