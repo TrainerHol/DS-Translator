@@ -43,11 +43,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Learning
 
-- [ ] **LRNG-01**: WaniKani API integration — fetch user's known kanji and SRS stages
+- [x] **LRNG-01**: WaniKani API integration — fetch user's known kanji and SRS stages
 - [ ] **LRNG-02**: Selective furigana — show furigana above unknown kanji only (toggleable: all/none/WaniKani-aware)
 - [x] **LRNG-03**: Word segmentation via morphological analysis (kuromoji)
-- [ ] **LRNG-04**: Tap-to-lookup dictionary (JMdict offline, bundled)
-- [ ] **LRNG-05**: JLPT level indicators on segmented vocabulary (N5-N1 color-coded)
+- [x] **LRNG-04**: Tap-to-lookup dictionary (JMdict offline, bundled)
+- [x] **LRNG-05**: JLPT level indicators on segmented vocabulary (N5-N1 color-coded)
 
 ### Overlay
 
@@ -121,11 +121,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUD-01 | Phase 1 | Complete |
 | AUD-02 | Phase 4 | Pending |
 | AUD-03 | Phase 1 | Complete |
-| LRNG-01 | Phase 3 | Pending |
+| LRNG-01 | Phase 3 | Complete |
 | LRNG-02 | Phase 3 | Pending |
 | LRNG-03 | Phase 3 | Complete |
-| LRNG-04 | Phase 3 | Pending |
-| LRNG-05 | Phase 3 | Pending |
+| LRNG-04 | Phase 3 | Complete |
+| LRNG-05 | Phase 3 | Complete |
 | OVLY-01 | Phase 5 | Pending |
 | OVLY-02 | Phase 5 | Pending |
 | OVLY-03 | Phase 5 | Pending |

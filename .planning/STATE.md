@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-04T01:20:43.659Z"
-last_activity: 2026-03-04 -- Plan 03-02 executed (domain models, Sudachi segmenter integration)
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-04T01:21:00Z"
+last_activity: 2026-03-04 -- Plan 03-03 executed (JMdict dictionary DB, WaniKani sync, AppDatabase v2 migration)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 6
-  percent: 42
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 3 of 5 (Learning Features)
-Plan: 3 of 4 in current phase
-Status: Plan 03-01 complete (translation engines), ready for next plan
-Last activity: 2026-03-04 -- Plan 03-01 executed (OpenAI/Claude translation engines, engine selection)
+Plan: 4 of 4 in current phase
+Status: Plan 03-03 complete (dictionary DB, WaniKani sync), ready for next plan
+Last activity: 2026-03-04 -- Plan 03-03 executed (JMdict dictionary DB, WaniKani sync, AppDatabase v2 migration)
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 7
 - Average duration: 9 min
-- Total execution time: 0.73 hours
+- Total execution time: 1.05 hours
 
 **By Phase:**
 
@@ -45,14 +45,15 @@ Progress: [███████░░░] 67%
 |-------|-------|-------|----------|
 | 1 | 2 | 9 min | 4.5 min |
 | 2 | 2 | 36 min | 18 min |
-| 3 | 1 | 3 min | 3 min |
+| 3 | 3 | 22 min | 7.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (4 min), 02-01 (16 min), 02-02 (20 min), 03-02 (3 min)
-- Trend: Phase 3 plan 02 was fast (domain models + segmenter wrapper, no heavy integration)
+- Last 5 plans: 02-01 (16 min), 02-02 (20 min), 03-01 (9 min), 03-02 (3 min), 03-03 (10 min)
+- Trend: Phase 3 plans vary from 3-10 min depending on complexity (data layer vs models)
 
 *Updated after each plan completion*
 | Phase 03 P01 | 9 | 2 tasks | 8 files |
+| Phase 03 P03 | 10 | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,11 @@ Recent decisions affecting current work:
 - [03-02]: Unit tests verify contract only; integration tests @Ignore for on-device execution with real dictionary
 - [Phase 03-01]: Reused existing OkHttpClient from AppModule instead of adding duplicate Hilt binding
 - [Phase 03-01]: Engine selection defaults to DeepL when settings returns null (backwards compatible)
+- [03-03]: Separate JMdictDatabase from AppDatabase: read-only dictionary from asset vs mutable user data
+- [03-03]: Proper Migration(1,2) instead of fallbackToDestructiveMigration to preserve cached translations
+- [03-03]: Two-phase WaniKani sync: subjects first (kanji chars), then assignments (SRS stages)
+- [03-03]: 1-second delay between paginated WaniKani API requests for rate limiting
+- [03-03]: Added org.json:json testImplementation for unit test JSON parsing support
 
 ### Pending Todos
 
@@ -96,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T01:20:43.657Z
-Stopped at: Completed 03-01-PLAN.md
-Resume file: None
+Last session: 2026-03-04T01:21:00Z
+Stopped at: Completed 03-03-PLAN.md
+Resume file: .planning/phases/03-learning-features/03-04-PLAN.md
