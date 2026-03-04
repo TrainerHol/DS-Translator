@@ -77,10 +77,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. User can save a named profile per game that stores capture region, OCR engine, translation engine, and TTS settings, and loading that profile restores all settings
   2. User can define a dialog region on the game screen and the app automatically reads new text in that region aloud via TTS as it appears
-**Plans**: TBD
+**Plans**: 3 plans across 2 waves
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md -- Data foundation: ProfileEntity, ProfileDao, DB migration v2->v3, CaptureRegion autoRead, SettingsRepository profile save/load, TtsManager queue mode (Wave 1)
+- [ ] 04-02-PLAN.md -- Service layer: RegionEditOverlay, FloatingButtonService updates (pencil/auto-read/profile buttons), CaptureService auto-read hook (Wave 2)
+- [ ] 04-03-PLAN.md -- UI layer: SettingsScreen profiles section, SettingsViewModel profile CRUD, auto-read settings UI, NavGraph deep link (Wave 2)
 
 ### Phase 5: Overlay Mode
 **Goal**: Users playing dual-screen games (DS/3DS) where the bottom screen shows game content can access translations via a floating overlay on the game screen
@@ -107,5 +109,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Capture-to-Display Pipeline | 2/3 | In progress | - |
 | 2. Continuous Capture and Caching | 2/2 | Complete | 2026-03-03 |
 | 3. Learning Features | 1/4 | In progress | - |
-| 4. Profiles and Auto-Read | 0/1 | Not started | - |
+| 4. Profiles and Auto-Read | 0/3 | Not started | - |
 | 5. Overlay Mode | 0/2 | Not started | - |
