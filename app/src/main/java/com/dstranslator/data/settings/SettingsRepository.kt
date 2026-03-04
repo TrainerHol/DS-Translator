@@ -15,6 +15,8 @@ import androidx.security.crypto.MasterKey
 import com.dstranslator.data.db.ProfileDao
 import com.dstranslator.data.db.ProfileEntity
 import com.dstranslator.domain.model.CaptureRegion
+import com.dstranslator.domain.model.OverlayConfig
+import com.dstranslator.domain.model.OverlayMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -365,6 +367,62 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // --- Overlay settings ---
+
+    suspend fun getOverlayMode(): OverlayMode {
+        return context.dataStore.data
+            .map { prefs -> OverlayMode.fromString(prefs[PREF_OVERLAY_MODE] ?: "Off") }
+            .first()
+    }
+
+    suspend fun setOverlayMode(mode: OverlayMode) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_OVERLAY_MODE] = mode.name
+        }
+    }
+
+    fun overlayModeFlow(): Flow<OverlayMode> {
+        return context.dataStore.data
+            .map { prefs -> OverlayMode.fromString(prefs[PREF_OVERLAY_MODE] ?: "Off") }
+    }
+
+    /**
+     * Get overlay configuration for a specific screen.
+     * @param isPrimary true for primary display, false for secondary display.
+     */
+    suspend fun getOverlayConfig(isPrimary: Boolean): OverlayConfig {
+        val key = if (isPrimary) PREF_OVERLAY_CONFIG_PRIMARY else PREF_OVERLAY_CONFIG_SECONDARY
+        val json = context.dataStore.data
+            .map { prefs -> prefs[key] }
+            .first() ?: return OverlayConfig()
+
+        return deserializeOverlayConfig(json)
+    }
+
+    /**
+     * Save overlay configuration for a specific screen.
+     * @param isPrimary true for primary display, false for secondary display.
+     * @param config The overlay configuration to persist.
+     */
+    suspend fun setOverlayConfig(isPrimary: Boolean, config: OverlayConfig) {
+        val key = if (isPrimary) PREF_OVERLAY_CONFIG_PRIMARY else PREF_OVERLAY_CONFIG_SECONDARY
+        context.dataStore.edit { prefs ->
+            prefs[key] = serializeOverlayConfig(config)
+        }
+    }
+
+    suspend fun getDismissPresentationOnOverlay(): Boolean {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_OVERLAY_DISMISS_PRESENTATION] ?: true }
+            .first()
+    }
+
+    suspend fun setDismissPresentationOnOverlay(dismiss: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_OVERLAY_DISMISS_PRESENTATION] = dismiss
+        }
+    }
+
     // --- Profile snapshot and restore ---
 
     /**
@@ -383,6 +441,10 @@ class SettingsRepository @Inject constructor(
             put("openAiModel", prefs[PREF_OPENAI_MODEL] ?: "")
             put("autoReadEnabled", prefs[PREF_AUTO_READ_ENABLED] ?: false)
             put("autoReadFlushMode", prefs[PREF_AUTO_READ_FLUSH_MODE] ?: true)
+            put("overlayMode", prefs[PREF_OVERLAY_MODE] ?: "Off")
+            put("overlayConfigPrimary", prefs[PREF_OVERLAY_CONFIG_PRIMARY] ?: "")
+            put("overlayConfigSecondary", prefs[PREF_OVERLAY_CONFIG_SECONDARY] ?: "")
+            put("dismissPresentation", prefs[PREF_OVERLAY_DISMISS_PRESENTATION] ?: true)
         }.toString()
     }
 
@@ -402,6 +464,10 @@ class SettingsRepository @Inject constructor(
             prefs[PREF_OPENAI_MODEL] = settings.optString("openAiModel", "")
             prefs[PREF_AUTO_READ_ENABLED] = settings.optBoolean("autoReadEnabled", false)
             prefs[PREF_AUTO_READ_FLUSH_MODE] = settings.optBoolean("autoReadFlushMode", true)
+            prefs[PREF_OVERLAY_MODE] = settings.optString("overlayMode", "Off")
+            prefs[PREF_OVERLAY_CONFIG_PRIMARY] = settings.optString("overlayConfigPrimary", "")
+            prefs[PREF_OVERLAY_CONFIG_SECONDARY] = settings.optString("overlayConfigSecondary", "")
+            prefs[PREF_OVERLAY_DISMISS_PRESENTATION] = settings.optBoolean("dismissPresentation", true)
             prefs[PREF_CAPTURE_REGIONS] = captureRegionsJson
         }
     }
@@ -451,7 +517,47 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // --- Overlay config serialization ---
+
     companion object {
+
+        /**
+         * Serialize an OverlayConfig to JSON string for DataStore storage.
+         */
+        fun serializeOverlayConfig(config: OverlayConfig): String {
+            return JSONObject().apply {
+                put("panelX", config.panelX)
+                put("panelY", config.panelY)
+                put("panelWidth", config.panelWidth)
+                put("panelHeight", config.panelHeight)
+                put("panelAlpha", config.panelAlpha.toDouble())
+                put("textSizeSp", config.textSizeSp)
+                put("isPinned", config.isPinned)
+                put("isLocked", config.isLocked)
+            }.toString()
+        }
+
+        /**
+         * Deserialize an OverlayConfig from JSON string.
+         * Missing keys produce default OverlayConfig values (sentinel 0 for panelWidth/panelHeight).
+         */
+        fun deserializeOverlayConfig(json: String): OverlayConfig {
+            return try {
+                val obj = JSONObject(json)
+                OverlayConfig(
+                    panelX = obj.optInt("panelX", 100),
+                    panelY = obj.optInt("panelY", 100),
+                    panelWidth = obj.optInt("panelWidth", 0),
+                    panelHeight = obj.optInt("panelHeight", 0),
+                    panelAlpha = obj.optDouble("panelAlpha", 0.85).toFloat(),
+                    textSizeSp = obj.optInt("textSizeSp", 14),
+                    isPinned = obj.optBoolean("isPinned", false),
+                    isLocked = obj.optBoolean("isLocked", false)
+                )
+            } catch (e: Exception) {
+                OverlayConfig()
+            }
+        }
         private const val KEY_DEEPL_API = "deepl_api_key"
         private const val KEY_OPENAI_API = "openai_api_key"
         private const val KEY_CLAUDE_API = "claude_api_key"
@@ -474,6 +580,12 @@ class SettingsRepository @Inject constructor(
         private val PREF_AUTO_READ_ENABLED = booleanPreferencesKey("auto_read_enabled")
         private val PREF_AUTO_READ_FLUSH_MODE = booleanPreferencesKey("auto_read_flush_mode")
         private val PREF_ACTIVE_PROFILE_ID = longPreferencesKey("active_profile_id")
+
+        // Overlay settings
+        private val PREF_OVERLAY_MODE = stringPreferencesKey("overlay_mode")
+        private val PREF_OVERLAY_CONFIG_PRIMARY = stringPreferencesKey("overlay_config_primary")
+        private val PREF_OVERLAY_CONFIG_SECONDARY = stringPreferencesKey("overlay_config_secondary")
+        private val PREF_OVERLAY_DISMISS_PRESENTATION = booleanPreferencesKey("overlay_dismiss_presentation")
 
         const val DEFAULT_FURIGANA_MODE = "all"
         const val DEFAULT_CAPTURE_INTERVAL_MS = 2000L
