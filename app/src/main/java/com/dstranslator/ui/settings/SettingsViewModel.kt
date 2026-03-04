@@ -2,6 +2,9 @@ package com.dstranslator.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dstranslator.data.db.ProfileDao
+import com.dstranslator.data.db.ProfileEntity
+import com.dstranslator.data.db.TranslationHistoryDao
 import com.dstranslator.data.settings.SettingsRepository
 import com.dstranslator.data.translation.TranslationManager
 import com.dstranslator.data.tts.TtsManager
@@ -17,14 +20,17 @@ import javax.inject.Inject
 /**
  * ViewModel for the settings screen. Manages DeepL API key, TTS voice selection,
  * OCR engine selection, translation engine selection, OpenAI/Claude/WaniKani config,
- * and furigana mode with persistence via SettingsRepository.
+ * furigana mode, profile management, and auto-read settings
+ * with persistence via SettingsRepository.
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val ttsManager: TtsManager,
     private val translationManager: TranslationManager,
-    private val waniKaniRepository: WaniKaniRepository
+    private val waniKaniRepository: WaniKaniRepository,
+    private val profileDao: ProfileDao,
+    private val translationHistoryDao: TranslationHistoryDao
 ) : ViewModel() {
 
     /** Current DeepL API key (loaded from encrypted storage) */
@@ -83,6 +89,26 @@ class SettingsViewModel @Inject constructor(
     private val _furiganaMode = MutableStateFlow("all")
     val furiganaMode: StateFlow<String> = _furiganaMode.asStateFlow()
 
+    /** All saved profiles (reactive from Room Flow) */
+    private val _profiles = MutableStateFlow<List<ProfileEntity>>(emptyList())
+    val profiles: StateFlow<List<ProfileEntity>> = _profiles.asStateFlow()
+
+    /** Currently active profile ID */
+    private val _activeProfileId = MutableStateFlow<Long?>(null)
+    val activeProfileId: StateFlow<Long?> = _activeProfileId.asStateFlow()
+
+    /** Brief status message for profile operations (auto-clears after 2s) */
+    private val _profileOperationStatus = MutableStateFlow("")
+    val profileOperationStatus: StateFlow<String> = _profileOperationStatus.asStateFlow()
+
+    /** Whether auto-read TTS is enabled */
+    private val _autoReadEnabled = MutableStateFlow(false)
+    val autoReadEnabled: StateFlow<Boolean> = _autoReadEnabled.asStateFlow()
+
+    /** Auto-read TTS mode: true = flush (interrupt), false = queue */
+    private val _autoReadFlushMode = MutableStateFlow(true)
+    val autoReadFlushMode: StateFlow<Boolean> = _autoReadFlushMode.asStateFlow()
+
     init {
         viewModelScope.launch {
             _deepLApiKey.value = settingsRepository.getDeepLApiKey() ?: ""
@@ -97,6 +123,13 @@ class SettingsViewModel @Inject constructor(
             _claudeApiKey.value = settingsRepository.getClaudeApiKey() ?: ""
             _waniKaniApiKey.value = settingsRepository.getWaniKaniApiKey() ?: ""
             _furiganaMode.value = settingsRepository.getFuriganaMode()
+            _activeProfileId.value = settingsRepository.getActiveProfileId()
+            _autoReadEnabled.value = settingsRepository.getAutoReadEnabled()
+            _autoReadFlushMode.value = settingsRepository.getAutoReadFlushMode()
+        }
+        // Collect profiles as Flow (auto-updates on changes)
+        viewModelScope.launch {
+            profileDao.getAll().collect { _profiles.value = it }
         }
     }
 
@@ -215,5 +248,134 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setFuriganaMode(mode)
         }
+    }
+
+    // ========== Profile CRUD Methods ==========
+
+    /**
+     * Save current settings as a new named profile.
+     * Auto-generates name "Profile N" if no name is provided.
+     */
+    fun saveAsProfile(name: String? = null) {
+        viewModelScope.launch {
+            val profileName = name?.takeIf { it.isNotBlank() }
+                ?: "Profile ${_profiles.value.size + 1}"
+
+            val settingsSnapshot = settingsRepository.createSettingsSnapshot()
+            val regionsSnapshot = settingsRepository.createCaptureRegionsSnapshot()
+
+            val entity = ProfileEntity(
+                name = profileName,
+                settingsJson = settingsSnapshot,
+                captureRegionsJson = regionsSnapshot,
+                autoReadEnabled = _autoReadEnabled.value,
+                autoReadFlushMode = _autoReadFlushMode.value
+            )
+            val newId = profileDao.insert(entity)
+            settingsRepository.setActiveProfileId(newId)
+            _activeProfileId.value = newId
+            flashStatus("Profile saved")
+        }
+    }
+
+    /**
+     * Load a profile: atomically restores all settings and refreshes all StateFlows.
+     */
+    fun loadProfile(profile: ProfileEntity) {
+        viewModelScope.launch {
+            settingsRepository.loadSettingsFromSnapshot(profile.settingsJson, profile.captureRegionsJson)
+            settingsRepository.setAutoReadEnabled(profile.autoReadEnabled)
+            settingsRepository.setAutoReadFlushMode(profile.autoReadFlushMode)
+            settingsRepository.setActiveProfileId(profile.id)
+            refreshAllSettings()
+            flashStatus("Profile '${profile.name}' loaded")
+        }
+    }
+
+    /**
+     * Rename a profile.
+     */
+    fun renameProfile(profile: ProfileEntity, newName: String) {
+        viewModelScope.launch {
+            profileDao.update(profile.copy(name = newName, updatedAt = System.currentTimeMillis()))
+            flashStatus("Profile renamed")
+        }
+    }
+
+    /**
+     * Delete a profile. Cannot delete the Default profile.
+     * Optionally deletes associated translation history.
+     */
+    fun deleteProfile(profile: ProfileEntity, deleteHistory: Boolean) {
+        if (profile.isDefault) {
+            viewModelScope.launch { flashStatus("Cannot delete Default profile") }
+            return
+        }
+        viewModelScope.launch {
+            profileDao.deleteById(profile.id)
+            if (deleteHistory) {
+                translationHistoryDao.deleteByProfile(profile.id)
+            }
+            // If this was the active profile, switch to Default
+            if (_activeProfileId.value == profile.id) {
+                val defaultProfile = profileDao.getDefault()
+                if (defaultProfile != null) {
+                    loadProfile(defaultProfile)
+                }
+            }
+            flashStatus("Profile deleted")
+        }
+    }
+
+    // ========== Auto-Read Methods ==========
+
+    /** Save auto-read enabled state. */
+    fun saveAutoReadEnabled(enabled: Boolean) {
+        _autoReadEnabled.value = enabled
+        viewModelScope.launch {
+            settingsRepository.setAutoReadEnabled(enabled)
+        }
+    }
+
+    /** Save auto-read TTS mode. true = flush (interrupt current), false = queue. */
+    fun saveAutoReadFlushMode(flush: Boolean) {
+        _autoReadFlushMode.value = flush
+        viewModelScope.launch {
+            settingsRepository.setAutoReadFlushMode(flush)
+        }
+    }
+
+    // ========== Helpers ==========
+
+    /**
+     * Refresh all ViewModel StateFlows by re-reading from SettingsRepository.
+     * Called after profile load to ensure all UI state is synchronized.
+     */
+    private fun refreshAllSettings() {
+        viewModelScope.launch {
+            _deepLApiKey.value = settingsRepository.getDeepLApiKey() ?: ""
+            _ttsVoiceName.value = settingsRepository.getTtsVoiceName()
+            _ocrEngineName.value = settingsRepository.getOcrEngineName() ?: "ML Kit"
+            _captureIntervalMs.value = settingsRepository.getCaptureIntervalMs()
+            _translationEngine.value = settingsRepository.getTranslationEngine() ?: "deepl"
+            _openAiApiKey.value = settingsRepository.getOpenAiApiKey() ?: ""
+            _openAiBaseUrl.value = settingsRepository.getOpenAiBaseUrl() ?: ""
+            _openAiModel.value = settingsRepository.getOpenAiModel() ?: ""
+            _claudeApiKey.value = settingsRepository.getClaudeApiKey() ?: ""
+            _waniKaniApiKey.value = settingsRepository.getWaniKaniApiKey() ?: ""
+            _furiganaMode.value = settingsRepository.getFuriganaMode()
+            _autoReadEnabled.value = settingsRepository.getAutoReadEnabled()
+            _autoReadFlushMode.value = settingsRepository.getAutoReadFlushMode()
+            _activeProfileId.value = settingsRepository.getActiveProfileId()
+        }
+    }
+
+    /**
+     * Flash a brief status message that auto-clears after 2 seconds.
+     */
+    private suspend fun flashStatus(message: String) {
+        _profileOperationStatus.value = message
+        delay(2000)
+        _profileOperationStatus.value = ""
     }
 }
