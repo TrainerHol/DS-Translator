@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-04T07:41:02Z"
-last_activity: 2026-03-04 -- Plan 05-02 executed (overlay panel, source labels, tooltips, display manager)
+status: verifying
+stopped_at: Completed 05-03-PLAN.md (awaiting on-device verification)
+last_updated: "2026-03-04T07:50:12.725Z"
+last_activity: 2026-03-04 -- Plan 05-03 executed (bubble menu expansion, overlay mode wiring, screen switch)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 15
-  completed_plans: 12
-  percent: 80
+  completed_plans: 13
+  percent: 87
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 5 of 5 (Overlay Mode)
-Plan: 3 of 3 in current phase
-Status: Plan 05-02 complete (overlay display system)
-Last activity: 2026-03-04 -- Plan 05-02 executed (overlay panel, source labels, tooltips, display manager)
+Plan: 3 of 3 in current phase (COMPLETE)
+Status: Plan 05-03 complete (overlay mode integration) -- awaiting on-device verification
+Last activity: 2026-03-04 -- Plan 05-03 executed (bubble menu expansion, overlay mode wiring, screen switch)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [████████░░] 80%
 | Phase 04 P03 | 5 | 2 tasks | 6 files |
 | Phase 05 P01 | 7 | 3 tasks | 14 files |
 | Phase 05 P02 | 5 | 2 tasks | 4 files |
+| Phase 05 P03 | 3 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ Recent decisions affecting current work:
 - [Phase 05-02]: Canvas-drawn SourceLabelView for lightweight many-label overlay rendering (not ComposeView per label)
 - [Phase 05-02]: Touch region-based panel interaction: top 36dp drag, bottom-right 48dp resize, body passes to Compose
 - [Phase 05-02]: Tooltip auto-dismiss after 5 seconds via coroutine delay with cancellation
+- [Phase 05]: TTS from overlay uses ACTION_SPEAK intent to CaptureService for service isolation
+- [Phase 05]: Overlay mode activates independently of capture; shows empty until OCR results arrive
 
 ### Pending Todos
 
@@ -126,6 +129,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T07:41:02Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-04T07:50:12.723Z
+Stopped at: Completed 05-03-PLAN.md (awaiting on-device verification)
 Resume file: None
