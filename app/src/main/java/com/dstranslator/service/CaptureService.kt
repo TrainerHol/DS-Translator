@@ -104,6 +104,12 @@ class CaptureService : Service() {
             ACTION_STOP -> handleStop()
             ACTION_START_CONTINUOUS -> startContinuousCapture()
             ACTION_STOP_CONTINUOUS -> stopContinuousCapture()
+            ACTION_DISMISS_PRESENTATION -> handleDismissPresentation()
+            ACTION_RESTORE_PRESENTATION -> handleRestorePresentation()
+            ACTION_SPEAK -> {
+                val text = intent.getStringExtra(EXTRA_SPEAK_TEXT)
+                if (!text.isNullOrBlank()) onPlayAudio(text)
+            }
         }
         return START_NOT_STICKY
     }
@@ -292,6 +298,28 @@ class CaptureService : Service() {
 
         // Register listener for display changes (disconnect handling)
         displayManager.registerDisplayListener(displayListener, null)
+    }
+
+    /**
+     * Dismiss the Presentation display when overlay mode is active.
+     * Called via intent from FloatingButtonService when overlay mode is enabled
+     * and the user has configured dismissPresentationOnOverlay = true.
+     */
+    private fun handleDismissPresentation() {
+        presentation?.dismiss()
+        presentation = null
+        Log.d(TAG, "Presentation dismissed for overlay mode")
+    }
+
+    /**
+     * Restore the Presentation display when overlay mode is turned off.
+     * Called via intent from FloatingButtonService when overlay mode returns to Off.
+     */
+    private fun handleRestorePresentation() {
+        if (presentation == null) {
+            setupPresentation()
+            Log.d(TAG, "Presentation restored after overlay mode off")
+        }
     }
 
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -532,9 +560,13 @@ class CaptureService : Service() {
         const val ACTION_START_CONTINUOUS = "com.dstranslator.action.START_CONTINUOUS"
         const val ACTION_STOP_CONTINUOUS = "com.dstranslator.action.STOP_CONTINUOUS"
         const val ACTION_OPEN_REGION_EDIT = "com.dstranslator.action.OPEN_REGION_EDIT"
+        const val ACTION_DISMISS_PRESENTATION = "com.dstranslator.action.DISMISS_PRESENTATION"
+        const val ACTION_RESTORE_PRESENTATION = "com.dstranslator.action.RESTORE_PRESENTATION"
+        const val ACTION_SPEAK = "com.dstranslator.action.SPEAK"
 
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_DATA = "extra_data"
+        const val EXTRA_SPEAK_TEXT = "extra_speak_text"
 
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "ds_translator_capture"

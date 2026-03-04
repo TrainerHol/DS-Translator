@@ -3,9 +3,13 @@ package com.dstranslator.service
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
 import android.os.IBinder
+import android.util.Log
+import android.view.Display
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -14,6 +18,7 @@ import android.view.WindowManager
 import android.widget.ImageView
 import com.dstranslator.R
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.domain.model.OverlayMode
 import com.dstranslator.ui.main.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +39,8 @@ import kotlinx.coroutines.runBlocking
  * - Pencil button: Opens region edit overlay (with permission guard)
  * - Auto-read button: Toggles auto-read on/off
  * - Profile button: Opens settings/profiles section
+ * - Overlay mode button: Cycles Off/OverlayOnSource/Panel
+ * - Screen switch button: Moves bubble and overlay to other display
  *
  * Observes CaptureService.isContinuousActive to change bubble appearance
  * when continuous mode is active (teal background indicator).
@@ -56,10 +63,23 @@ class FloatingButtonService : Service() {
     private lateinit var btnContinuousStop: ImageView
     private lateinit var btnSingleCapture: ImageView
 
-    // View references -- new buttons (Phase 4)
+    // View references -- Phase 4 buttons
     private lateinit var btnRegionEdit: ImageView
     private lateinit var btnAutoReadToggle: ImageView
     private lateinit var btnProfile: ImageView
+
+    // View references -- Phase 5 overlay buttons
+    private lateinit var btnOverlayMode: ImageView
+    private lateinit var btnScreenSwitch: ImageView
+
+    // Overlay display manager (non-null while overlay is active)
+    private var overlayDisplayManager: OverlayDisplayManager? = null
+
+    // Current overlay mode tracking
+    private var currentOverlayMode: OverlayMode = OverlayMode.Off
+
+    // Current display ID for screen switching
+    private var currentDisplayId: Int = Display.DEFAULT_DISPLAY
 
     // Region edit overlay (non-null while overlay is visible)
     private var regionEditOverlay: RegionEditOverlay? = null
@@ -100,10 +120,14 @@ class FloatingButtonService : Service() {
         btnContinuousStop = menuView.findViewById(R.id.btn_continuous_stop)
         btnSingleCapture = menuView.findViewById(R.id.btn_single_capture)
 
-        // Find view references -- new buttons
+        // Find view references -- Phase 4 buttons
         btnRegionEdit = menuView.findViewById(R.id.btn_region_edit)
         btnAutoReadToggle = menuView.findViewById(R.id.btn_auto_read_toggle)
         btnProfile = menuView.findViewById(R.id.btn_profile)
+
+        // Find view references -- Phase 5 overlay buttons
+        btnOverlayMode = menuView.findViewById(R.id.btn_overlay_mode)
+        btnScreenSwitch = menuView.findViewById(R.id.btn_screen_switch)
 
         // Configure window parameters for overlay.
         // FLAG_SECURE prevents this overlay from appearing in MediaProjection
@@ -145,7 +169,7 @@ class FloatingButtonService : Service() {
             collapseMenu()
         }
 
-        // --- New button click listeners (Phase 4) ---
+        // --- Phase 4 button click listeners ---
 
         // Pencil button: Region edit with permission guard
         btnRegionEdit.setOnClickListener {
@@ -173,6 +197,27 @@ class FloatingButtonService : Service() {
             collapseMenu()
         }
 
+        // --- Phase 5 overlay button click listeners ---
+
+        // Overlay mode button: Cycle Off -> OverlayOnSource -> Panel -> Off
+        btnOverlayMode.setOnClickListener {
+            observerScope.launch {
+                val nextMode = when (currentOverlayMode) {
+                    OverlayMode.Off -> OverlayMode.OverlayOnSource
+                    OverlayMode.OverlayOnSource -> OverlayMode.Panel
+                    OverlayMode.Panel -> OverlayMode.Off
+                }
+                handleOverlayModeSwitch(nextMode)
+            }
+            collapseMenu()
+        }
+
+        // Screen switch button: Move bubble and overlay to other display
+        btnScreenSwitch.setOnClickListener {
+            observerScope.launch { handleScreenSwitch() }
+            collapseMenu()
+        }
+
         // Observe continuous mode state to change bubble appearance
         observerScope.launch {
             CaptureService.isContinuousActive.collect { isActive ->
@@ -190,6 +235,15 @@ class FloatingButtonService : Service() {
             }
         }
 
+        // Observe overlay mode state to update overlay mode button appearance
+        observerScope.launch {
+            settingsRepository.overlayModeFlow().collect { mode ->
+                currentOverlayMode = mode
+                val bgRes = if (mode != OverlayMode.Off) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
+                btnOverlayMode.setBackgroundResource(bgRes)
+            }
+        }
+
         // Observe pipeline state for pending region edit after permission grant
         observerScope.launch {
             CaptureService.pipelineState.collect { state ->
@@ -202,6 +256,140 @@ class FloatingButtonService : Service() {
 
         // Add menu to window
         windowManager.addView(menuView, params)
+    }
+
+    /**
+     * Handle overlay mode switching.
+     *
+     * - Off: Clean up overlay, restore Presentation if it was dismissed.
+     * - OverlayOnSource / Panel: Create OverlayDisplayManager if needed,
+     *   switch mode, persist to settings, optionally dismiss Presentation.
+     */
+    private suspend fun handleOverlayModeSwitch(mode: OverlayMode) {
+        if (mode == OverlayMode.Off) {
+            // Clean up existing overlay
+            overlayDisplayManager?.cleanup()
+            overlayDisplayManager = null
+            settingsRepository.setOverlayMode(OverlayMode.Off)
+
+            // Restore Presentation if it was dismissed
+            sendCaptureAction(CaptureService.ACTION_RESTORE_PRESENTATION)
+            Log.d(TAG, "Overlay mode switched to Off, Presentation restore requested")
+        } else {
+            // Create OverlayDisplayManager if not already active
+            if (overlayDisplayManager == null) {
+                val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                val targetDisplay = displayManager.displays.firstOrNull { it.displayId == currentDisplayId }
+                    ?: displayManager.displays.first()
+
+                overlayDisplayManager = OverlayDisplayManager(
+                    service = this,
+                    targetDisplay = targetDisplay,
+                    translations = CaptureService.translations,
+                    ocrResults = CaptureService.latestOcrResult,
+                    onPlayAudio = { text ->
+                        val intent = Intent(this, CaptureService::class.java).apply {
+                            action = CaptureService.ACTION_SPEAK
+                            putExtra(CaptureService.EXTRA_SPEAK_TEXT, text)
+                        }
+                        startService(intent)
+                    },
+                    onWordLookup = { word ->
+                        CaptureService.jmdictRepositoryRef?.lookupWord(word.dictionaryForm) ?: emptyList()
+                    },
+                    settingsRepository = settingsRepository
+                )
+            }
+
+            // Switch mode on the overlay display manager
+            overlayDisplayManager?.switchMode(mode)
+
+            // Persist overlay mode
+            settingsRepository.setOverlayMode(mode)
+
+            // Optionally dismiss Presentation when overlay is active
+            if (settingsRepository.getDismissPresentationOnOverlay()) {
+                sendCaptureAction(CaptureService.ACTION_DISMISS_PRESENTATION)
+            }
+
+            Log.d(TAG, "Overlay mode switched to $mode")
+        }
+    }
+
+    /**
+     * Handle screen switch: move bubble and overlay to the other display.
+     *
+     * 1. Find all available displays
+     * 2. Determine target display (switch between primary and secondary)
+     * 3. Clean up current overlay on old display
+     * 4. Remove bubble from current WindowManager
+     * 5. Create new display context and WindowManager for target display
+     * 6. Re-add bubble on new display
+     * 7. Recreate overlay on new display if overlay mode is active
+     */
+    private suspend fun handleScreenSwitch() {
+        val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        val allDisplays = displayManager.displays
+        if (allDisplays.size < 2) {
+            Log.w(TAG, "Screen switch requested but only ${allDisplays.size} display(s) available")
+            return
+        }
+
+        // Find target display (the one we're NOT currently on)
+        val targetDisplay = allDisplays.firstOrNull { it.displayId != currentDisplayId }
+            ?: allDisplays.first()
+
+        // Clean up current overlay
+        overlayDisplayManager?.cleanup()
+        overlayDisplayManager = null
+
+        // Remove bubble from current WindowManager
+        try {
+            windowManager.removeView(menuView)
+        } catch (_: IllegalArgumentException) {
+            // View already removed
+        }
+
+        // Create new display context and WindowManager for target display
+        val targetContext = createDisplayContext(targetDisplay)
+        windowManager = targetContext.getSystemService(WINDOW_SERVICE) as WindowManager
+
+        // Restore or use default position for the target display
+        val savedPosition = settingsRepository.getFloatingButtonPosition()
+        if (savedPosition != null) {
+            params.x = savedPosition.first
+            params.y = savedPosition.second
+        }
+
+        // Re-add menuView to new WindowManager
+        windowManager.addView(menuView, params)
+
+        // Update current display tracking
+        currentDisplayId = targetDisplay.displayId
+
+        // If overlay mode is active, recreate overlay on the new display
+        if (currentOverlayMode != OverlayMode.Off) {
+            overlayDisplayManager = OverlayDisplayManager(
+                service = this,
+                targetDisplay = targetDisplay,
+                translations = CaptureService.translations,
+                ocrResults = CaptureService.latestOcrResult,
+                onPlayAudio = { text ->
+                    val intent = Intent(this, CaptureService::class.java).apply {
+                        action = CaptureService.ACTION_SPEAK
+                        putExtra(CaptureService.EXTRA_SPEAK_TEXT, text)
+                    }
+                    startService(intent)
+                },
+                onWordLookup = { word ->
+                    CaptureService.jmdictRepositoryRef?.lookupWord(word.dictionaryForm) ?: emptyList()
+                },
+                settingsRepository = settingsRepository
+            )
+            overlayDisplayManager?.switchMode(currentOverlayMode)
+        }
+
+        Log.d(TAG, "Bubble and overlay switched to display ${targetDisplay.displayId}")
     }
 
     /**
@@ -333,17 +521,19 @@ class FloatingButtonService : Service() {
     }
 
     /**
-     * Expand the bubble menu to show all 6 action buttons.
+     * Expand the bubble menu to show all 8 action buttons in a 2x4 grid.
      * Animates each button with a staggered cascade effect.
      */
     private fun expandMenu() {
         isExpanded = true
-        val buttons = listOf(
-            btnContinuousStart, btnContinuousStop, btnSingleCapture,
-            btnRegionEdit, btnAutoReadToggle, btnProfile
-        )
 
-        buttons.forEachIndexed { index, button ->
+        // Row 1 buttons
+        val row1 = listOf(btnContinuousStart, btnContinuousStop, btnSingleCapture, btnRegionEdit)
+        // Row 2 buttons
+        val row2 = listOf(btnAutoReadToggle, btnProfile, btnOverlayMode, btnScreenSwitch)
+        val allButtons = row1 + row2
+
+        allButtons.forEachIndexed { index, button ->
             button.visibility = View.VISIBLE
             button.alpha = 0f
             button.translationX = -20f
@@ -369,12 +559,14 @@ class FloatingButtonService : Service() {
      */
     private fun collapseMenu() {
         isExpanded = false
-        val buttons = listOf(
-            btnProfile, btnAutoReadToggle, btnRegionEdit,
-            btnSingleCapture, btnContinuousStop, btnContinuousStart
+
+        // Reverse order for collapse animation
+        val allButtons = listOf(
+            btnScreenSwitch, btnOverlayMode, btnProfile, btnAutoReadToggle,
+            btnRegionEdit, btnSingleCapture, btnContinuousStop, btnContinuousStart
         )
 
-        buttons.forEachIndexed { index, button ->
+        allButtons.forEachIndexed { index, button ->
             ObjectAnimator.ofPropertyValuesHolder(
                 button,
                 PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0f),
@@ -420,12 +612,23 @@ class FloatingButtonService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        // Clean up overlay display manager before removing menu view
+        overlayDisplayManager?.cleanup()
+        overlayDisplayManager = null
+
         removeRegionEditOverlay()
         observerScope.cancel()
-        windowManager.removeView(menuView)
+        try {
+            windowManager.removeView(menuView)
+        } catch (_: IllegalArgumentException) {
+            // View already removed
+        }
     }
 
     companion object {
+        private const val TAG = "FloatingButtonService"
+
         /** Minimum movement in pixels before a touch is considered a drag */
         private const val DRAG_THRESHOLD = 10
 
