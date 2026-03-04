@@ -82,12 +82,14 @@ class FloatingButtonService : Service() {
         btnContinuousStop = menuView.findViewById(R.id.btn_continuous_stop)
         btnSingleCapture = menuView.findViewById(R.id.btn_single_capture)
 
-        // Configure window parameters for overlay
+        // Configure window parameters for overlay.
+        // FLAG_SECURE prevents this overlay from appearing in MediaProjection
+        // captures, which would cause the translator to OCR its own controls.
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_SECURE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START

@@ -3,6 +3,7 @@ package com.dstranslator.ui.presentation
 import android.content.Context
 import android.os.Bundle
 import android.view.Display
+import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -34,6 +35,13 @@ class TranslationPresentation(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Prevent this window from appearing in MediaProjection captures.
+        // Without this, the translator OCRs its own translation list and loops.
+        window?.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
 
         val composeView = ComposeView(context).apply {
             setContent {
