@@ -18,6 +18,9 @@ import android.view.WindowManager
 import com.dstranslator.R
 import com.dstranslator.data.capture.OcrPreprocessor
 import com.dstranslator.data.capture.ScreenCaptureManager
+import com.dstranslator.data.dictionary.JMdictRepository
+import com.dstranslator.data.segmentation.FuriganaResolver
+import com.dstranslator.data.segmentation.SudachiSegmenter
 import com.dstranslator.data.settings.SettingsRepository
 import com.dstranslator.data.translation.TranslationManager
 import com.dstranslator.data.tts.TtsManager
@@ -63,6 +66,9 @@ class CaptureService : Service() {
     @Inject lateinit var screenCaptureManager: ScreenCaptureManager
     @Inject lateinit var ocrPreprocessor: OcrPreprocessor
     @Inject lateinit var translationHistoryDao: TranslationHistoryDao
+    @Inject lateinit var sudachiSegmenter: SudachiSegmenter
+    @Inject lateinit var furiganaResolver: FuriganaResolver
+    @Inject lateinit var jmdictRepository: JMdictRepository
 
     private var mediaProjection: MediaProjection? = null
     private var presentation: TranslationPresentation? = null
@@ -125,6 +131,16 @@ class CaptureService : Service() {
 
         // Initialize TTS
         ttsManager.initialize()
+
+        // Initialize Sudachi segmenter (async, non-blocking)
+        serviceScope.launch {
+            try {
+                sudachiSegmenter.initialize()
+                Log.d(TAG, "Sudachi segmenter initialized")
+            } catch (e: Exception) {
+                Log.w(TAG, "Sudachi initialization failed; segmentation disabled", e)
+            }
+        }
 
         // Set up Presentation on secondary display
         setupPresentation()
@@ -244,7 +260,10 @@ class CaptureService : Service() {
                 this,
                 display,
                 _translations.asStateFlow(),
-                ::onPlayAudio
+                ::onPlayAudio,
+                onWordLookup = { word ->
+                    jmdictRepository.lookupWord(word.dictionaryForm)
+                }
             )
             presentation?.show()
             Log.d(TAG, "Presentation shown on display: ${display.name}")
@@ -317,14 +336,36 @@ class CaptureService : Service() {
             }
             previousOcrText = currentText
 
-            // Translate each text block and persist to Room history
+            // Translate each text block, segment, and persist to Room history
             val newEntries = textBlocks.mapNotNull { block ->
                 if (block.text.isBlank()) return@mapNotNull null
                 val translation = translationManager.translate(block.text)
+
+                // Segment Japanese text and resolve furigana (graceful degradation)
+                val segmentedWords = if (sudachiSegmenter.isInitialized) {
+                    try {
+                        sudachiSegmenter.segment(block.text)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Segmentation failed for text block", e)
+                        emptyList()
+                    }
+                } else emptyList()
+
+                val furiganaSegments = if (segmentedWords.isNotEmpty()) {
+                    try {
+                        furiganaResolver.resolve(segmentedWords)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Furigana resolution failed", e)
+                        emptyList()
+                    }
+                } else emptyList()
+
                 val entry = TranslationEntry(
                     japanese = block.text,
                     english = translation,
-                    sessionId = currentSessionId
+                    sessionId = currentSessionId,
+                    segmentedWords = segmentedWords,
+                    furiganaSegments = furiganaSegments
                 )
 
                 // Persist to history (per-session, persisted to Room)

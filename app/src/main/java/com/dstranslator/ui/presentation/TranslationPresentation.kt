@@ -6,6 +6,8 @@ import android.view.Display
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.dstranslator.domain.model.DictionaryResult
+import com.dstranslator.domain.model.SegmentedWord
 import com.dstranslator.domain.model.TranslationEntry
 import com.dstranslator.ui.theme.DsTranslatorPresentationTheme
 import kotlinx.coroutines.flow.StateFlow
@@ -20,12 +22,14 @@ import kotlinx.coroutines.flow.StateFlow
  * @param display The secondary display (AYN Thor bottom screen)
  * @param translations StateFlow of accumulated translation entries to display
  * @param onPlayAudio Callback when user taps play-audio on a translation entry
+ * @param onWordLookup Callback to look up a word in the dictionary, returns DictionaryResult
  */
 class TranslationPresentation(
     context: Context,
     display: Display,
     private val translations: StateFlow<List<TranslationEntry>>,
-    private val onPlayAudio: (String) -> Unit
+    private val onPlayAudio: (String) -> Unit,
+    private val onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
 ) : android.app.Presentation(context, display) {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,7 +40,8 @@ class TranslationPresentation(
                 DsTranslatorPresentationTheme {
                     TranslationListScreen(
                         translations = translations,
-                        onPlayAudio = onPlayAudio
+                        onPlayAudio = onPlayAudio,
+                        onWordLookup = onWordLookup
                     )
                 }
             }

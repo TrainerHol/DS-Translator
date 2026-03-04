@@ -1,23 +1,16 @@
 package com.dstranslator.di
 
-import android.content.Context
-import com.dstranslator.data.segmentation.SudachiSegmenter
 import dagger.Module
-import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
 
+/**
+ * Hilt module for segmentation dependencies.
+ *
+ * SudachiSegmenter and FuriganaResolver use constructor injection
+ * (@Inject constructor with @Singleton) so no explicit @Provides needed.
+ * This module is retained as a placeholder for future segmentation bindings.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
-object SegmentationModule {
-
-    @Provides
-    @Singleton
-    fun provideSudachiSegmenter(
-        @ApplicationContext context: Context
-    ): SudachiSegmenter {
-        return SudachiSegmenter(context)
-    }
-}
+object SegmentationModule
