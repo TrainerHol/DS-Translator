@@ -38,7 +38,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Audio
 
 - [x] **AUD-01**: Tap any sentence on bottom screen to hear Japanese TTS
-- [ ] **AUD-02**: User can define a dialog region that auto-reads new text via TTS
+- [x] **AUD-02**: User can define a dialog region that auto-reads new text via TTS
 - [x] **AUD-03**: TTS voice selection in settings
 
 ### Learning
@@ -61,7 +61,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **SETT-01**: API key management for translation engines, OCR, and WaniKani
 - [x] **SETT-02**: Capture interval and OCR engine configuration
-- [ ] **SETT-03**: Per-game profiles (capture region, engines, TTS settings saved per game)
+- [x] **SETT-03**: Per-game profiles (capture region, engines, TTS settings saved per game)
 
 ## v2 Requirements
 
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DISP-03 | Phase 2 | Complete |
 | DISP-04 | Phase 1 | Complete |
 | AUD-01 | Phase 1 | Complete |
-| AUD-02 | Phase 4 | Pending |
+| AUD-02 | Phase 4 | Complete |
 | AUD-03 | Phase 1 | Complete |
 | LRNG-01 | Phase 3 | Complete |
 | LRNG-02 | Phase 3 | Pending |
@@ -133,7 +133,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OVLY-05 | Phase 5 | Pending |
 | SETT-01 | Phase 1 | Complete |
 | SETT-02 | Phase 2 | Complete |
-| SETT-03 | Phase 4 | Pending |
+| SETT-03 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 32 total

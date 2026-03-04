@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 4 context gathered
-last_updated: "2026-03-04T05:14:52.968Z"
-last_activity: 2026-03-04 -- Plan 03-03 executed (JMdict dictionary DB, WaniKani sync, AppDatabase v2 migration)
+status: in_progress
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-04T05:50:08Z"
+last_activity: 2026-03-04 -- Plan 04-01 executed (profile data layer, auto-read settings, TtsManager queue mode)
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 8
+  percent: 67
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Clean, non-intrusive live translation of Japanese games on dual-screen hardware -- game on top, translations on bottom, never interrupting gameplay.
-**Current focus:** Phase 3: Learning Features
+**Current focus:** Phase 4: Profiles and Auto-Read
 
 ## Current Position
 
-Phase: 3 of 5 (Learning Features)
-Plan: 4 of 4 in current phase
-Status: Plan 03-03 complete (dictionary DB, WaniKani sync), ready for next plan
-Last activity: 2026-03-04 -- Plan 03-03 executed (JMdict dictionary DB, WaniKani sync, AppDatabase v2 migration)
+Phase: 4 of 5 (Profiles and Auto-Read)
+Plan: 2 of 3 in current phase
+Status: Plan 04-01 complete (profile data layer), ready for plan 04-02
+Last activity: 2026-03-04 -- Plan 04-01 executed (profile data layer, auto-read settings, TtsManager queue mode)
 
-Progress: [████████░░] 78%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 9 min
-- Total execution time: 1.05 hours
+- Total execution time: 1.15 hours
 
 **By Phase:**
 
@@ -46,14 +46,16 @@ Progress: [████████░░] 78%
 | 1 | 2 | 9 min | 4.5 min |
 | 2 | 2 | 36 min | 18 min |
 | 3 | 3 | 22 min | 7.3 min |
+| 4 | 1 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (16 min), 02-02 (20 min), 03-01 (9 min), 03-02 (3 min), 03-03 (10 min)
-- Trend: Phase 3 plans vary from 3-10 min depending on complexity (data layer vs models)
+- Last 5 plans: 02-02 (20 min), 03-01 (9 min), 03-02 (3 min), 03-03 (10 min), 04-01 (6 min)
+- Trend: Data layer plans consistently fast (6-10 min)
 
 *Updated after each plan completion*
 | Phase 03 P01 | 9 | 2 tasks | 8 files |
 | Phase 03 P03 | 10 | 2 tasks | 17 files |
+| Phase 04 P01 | 6 | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -90,6 +92,10 @@ Recent decisions affecting current work:
 - [03-03]: Two-phase WaniKani sync: subjects first (kanji chars), then assignments (SRS stages)
 - [03-03]: 1-second delay between paginated WaniKani API requests for rate limiting
 - [03-03]: Added org.json:json testImplementation for unit test JSON parsing support
+- [04-01]: FakeProfileDao for unit testing DAO contract without Robolectric (faster, simpler)
+- [04-01]: API keys excluded from profiles -- profiles store engine/config settings only, keys are global
+- [04-01]: Atomic single DataStore.edit block for profile loading prevents partial state corruption
+- [04-01]: CaptureRegion.autoRead defaults to false for backward compat with existing serialized data
 
 ### Pending Todos
 
@@ -102,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T05:14:52.961Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-profiles-and-auto-read/04-CONTEXT.md
+Last session: 2026-03-04T05:50:08Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-profiles-and-auto-read/04-02-PLAN.md
