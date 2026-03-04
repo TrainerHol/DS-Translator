@@ -14,8 +14,8 @@ android {
         applicationId = "com.dstranslator"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.02"
+        versionCode = 4
+        versionName = "1.03"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
