@@ -15,6 +15,7 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.dstranslator.service.CaptureService
 import com.dstranslator.service.FloatingButtonService
@@ -25,12 +26,14 @@ import dagger.hilt.android.AndroidEntryPoint
 /**
  * Main entry point activity. Hosts the Compose navigation graph and manages
  * system permission flows: MediaProjection, SYSTEM_ALERT_WINDOW, and POST_NOTIFICATIONS.
+ * Also handles intents from FloatingButtonService for profile navigation and capture.
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private lateinit var mediaProjectionLauncher: ActivityResultLauncher<Intent>
     private lateinit var notificationPermissionLauncher: ActivityResultLauncher<String>
+    private var navController: NavHostController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,12 +68,38 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             DsTranslatorTheme {
-                val navController = rememberNavController()
+                val nc = rememberNavController()
+                navController = nc
                 NavGraph(
-                    navController = navController,
+                    navController = nc,
                     onStartCapture = ::onStartCapture,
                     onStopCapture = ::onStopCapture
                 )
+            }
+        }
+
+        // Handle intent that launched the activity (e.g., from FloatingButtonService)
+        handleActionIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleActionIntent(intent)
+    }
+
+    /**
+     * Handle action intents from FloatingButtonService and other components.
+     */
+    private fun handleActionIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_OPEN_PROFILES -> {
+                navController?.navigate("settings?section=profiles")
+            }
+            ACTION_START_CAPTURE_THEN_EDIT_REGIONS -> {
+                // Trigger normal capture permission flow.
+                // FloatingButtonService handles the region edit overlay opening via
+                // its pendingRegionEdit flag after CaptureService starts.
+                onStartCapture()
             }
         }
     }
@@ -140,5 +169,10 @@ class MainActivity : ComponentActivity() {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    companion object {
+        const val ACTION_OPEN_PROFILES = "com.dstranslator.action.OPEN_PROFILES"
+        const val ACTION_START_CAPTURE_THEN_EDIT_REGIONS = "com.dstranslator.action.START_CAPTURE_THEN_EDIT_REGIONS"
     }
 }

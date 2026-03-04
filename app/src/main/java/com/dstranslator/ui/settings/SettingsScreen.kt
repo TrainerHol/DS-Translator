@@ -1,5 +1,9 @@
 package com.dstranslator.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,11 +18,20 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -33,10 +46,13 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,20 +61,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.dstranslator.data.db.ProfileEntity
+import kotlinx.coroutines.delay
 
 /**
- * Settings screen with translation engine configuration, API keys, TTS voice picker,
- * OCR engine selector, WaniKani integration, and furigana mode toggle.
+ * Settings screen with game profiles, translation engine configuration, API keys,
+ * TTS voice picker, auto-read settings, OCR engine selector, WaniKani integration,
+ * and furigana mode toggle.
  * All settings are persisted via SettingsRepository on change.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    scrollToProfiles: Boolean = false
 ) {
     val deepLApiKey by viewModel.deepLApiKey.collectAsState()
     val ttsVoiceName by viewModel.ttsVoiceName.collectAsState()
@@ -74,11 +95,26 @@ fun SettingsScreen(
     val waniKaniApiKey by viewModel.waniKaniApiKey.collectAsState()
     val waniKaniSyncStatus by viewModel.waniKaniSyncStatus.collectAsState()
     val furiganaMode by viewModel.furiganaMode.collectAsState()
+    val profiles by viewModel.profiles.collectAsState()
+    val activeProfileId by viewModel.activeProfileId.collectAsState()
+    val profileOperationStatus by viewModel.profileOperationStatus.collectAsState()
+    val autoReadEnabled by viewModel.autoReadEnabled.collectAsState()
+    val autoReadFlushMode by viewModel.autoReadFlushMode.collectAsState()
 
     var deepLKeyVisible by remember { mutableStateOf(false) }
     var openAiKeyVisible by remember { mutableStateOf(false) }
     var claudeKeyVisible by remember { mutableStateOf(false) }
     var waniKaniKeyVisible by remember { mutableStateOf(false) }
+
+    val scrollState = rememberScrollState()
+
+    // Auto-scroll to profiles section (at top) when deep-linked
+    if (scrollToProfiles) {
+        LaunchedEffect(Unit) {
+            delay(100)
+            scrollState.animateScrollTo(0)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -108,9 +144,24 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
+                // ===== Game Profiles Section (TOP) =====
+                ProfilesSection(
+                    profiles = profiles,
+                    activeProfileId = activeProfileId,
+                    operationStatus = profileOperationStatus,
+                    onSaveAsProfile = { name -> viewModel.saveAsProfile(name) },
+                    onLoadProfile = { profile -> viewModel.loadProfile(profile) },
+                    onRenameProfile = { profile, newName -> viewModel.renameProfile(profile, newName) },
+                    onDeleteProfile = { profile, deleteHistory -> viewModel.deleteProfile(profile, deleteHistory) }
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(24.dp))
+
                 // ===== Translation Engine Section =====
                 Text(
                     text = "Translation Engine",
@@ -304,6 +355,16 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
+                // ===== Auto-Read Section (after TTS) =====
+                AutoReadSection(
+                    autoReadEnabled = autoReadEnabled,
+                    autoReadFlushMode = autoReadFlushMode,
+                    onAutoReadEnabledChanged = { viewModel.saveAutoReadEnabled(it) },
+                    onAutoReadFlushModeChanged = { viewModel.saveAutoReadFlushMode(it) }
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
                 // ===== OCR Engine Section =====
                 Text(
                     text = "OCR Engine",
@@ -375,6 +436,473 @@ fun SettingsScreen(
         }
     }
 }
+
+// ==================== Profiles Section ====================
+
+/**
+ * Game profiles section with save, list, load, rename, and delete functionality.
+ */
+@Composable
+private fun ProfilesSection(
+    profiles: List<ProfileEntity>,
+    activeProfileId: Long?,
+    operationStatus: String,
+    onSaveAsProfile: (String?) -> Unit,
+    onLoadProfile: (ProfileEntity) -> Unit,
+    onRenameProfile: (ProfileEntity, String) -> Unit,
+    onDeleteProfile: (ProfileEntity, Boolean) -> Unit
+) {
+    var showSaveDialog by remember { mutableStateOf(false) }
+
+    Text(
+        text = "Game Profiles",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        text = "Save settings per game for quick switching",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Save as Profile button
+    Button(
+        onClick = { showSaveDialog = true },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Save as Profile")
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Profile list
+    profiles.forEach { profile ->
+        ProfileCard(
+            profile = profile,
+            isActive = profile.id == activeProfileId,
+            onLoad = { onLoadProfile(profile) },
+            onRename = { newName -> onRenameProfile(profile, newName) },
+            onDelete = { deleteHistory -> onDeleteProfile(profile, deleteHistory) }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    // Operation status
+    AnimatedVisibility(visible = operationStatus.isNotEmpty()) {
+        Text(
+            text = operationStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+
+    // Save as Profile dialog
+    if (showSaveDialog) {
+        SaveProfileDialog(
+            suggestedName = "Profile ${profiles.size + 1}",
+            onConfirm = { name ->
+                onSaveAsProfile(name)
+                showSaveDialog = false
+            },
+            onDismiss = { showSaveDialog = false }
+        )
+    }
+}
+
+/**
+ * Card displaying a single profile with load, rename, and delete actions.
+ */
+@Composable
+private fun ProfileCard(
+    profile: ProfileEntity,
+    isActive: Boolean,
+    onLoad: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: (Boolean) -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onLoad() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isActive)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = profile.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isActive)
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (profile.isDefault) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Default",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                if (isActive) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        Text(
+                            text = "Active",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            // Three-dot menu
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Profile options"
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        onClick = {
+                            showMenu = false
+                            showRenameDialog = true
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                        }
+                    )
+                    if (!profile.isDefault) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Delete",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                showDeleteDialog = true
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Rename dialog
+    if (showRenameDialog) {
+        RenameProfileDialog(
+            currentName = profile.name,
+            onConfirm = { newName ->
+                onRename(newName)
+                showRenameDialog = false
+            },
+            onDismiss = { showRenameDialog = false }
+        )
+    }
+
+    // Delete dialog
+    if (showDeleteDialog) {
+        DeleteProfileDialog(
+            profileName = profile.name,
+            onConfirm = { deleteHistory ->
+                onDelete(deleteHistory)
+                showDeleteDialog = false
+            },
+            onDismiss = { showDeleteDialog = false }
+        )
+    }
+}
+
+/**
+ * Dialog for saving current settings as a new profile.
+ */
+@Composable
+private fun SaveProfileDialog(
+    suggestedName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf(suggestedName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save as Profile") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Profile Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank()
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for renaming a profile.
+ */
+@Composable
+private fun RenameProfileDialog(
+    currentName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf(currentName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename Profile") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("New Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank()
+            ) {
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for deleting a profile with option to delete associated history.
+ */
+@Composable
+private fun DeleteProfileDialog(
+    profileName: String,
+    onConfirm: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var deleteHistory by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Profile") },
+        text = {
+            Column {
+                Text("Delete profile '$profileName'?")
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { deleteHistory = !deleteHistory }
+                ) {
+                    Checkbox(
+                        checked = deleteHistory,
+                        onCheckedChange = { deleteHistory = it }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Also delete associated translation history",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(deleteHistory) }) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// ==================== Auto-Read Section ====================
+
+/**
+ * Auto-read section with enabled toggle and flush/queue mode selector.
+ */
+@Composable
+private fun AutoReadSection(
+    autoReadEnabled: Boolean,
+    autoReadFlushMode: Boolean,
+    onAutoReadEnabledChanged: (Boolean) -> Unit,
+    onAutoReadFlushModeChanged: (Boolean) -> Unit
+) {
+    Text(
+        text = "Auto-Read",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        text = "Automatically read new dialog text aloud via TTS",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Auto-Read Enabled switch
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "Auto-Read Enabled",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Switch(
+            checked = autoReadEnabled,
+            onCheckedChange = onAutoReadEnabledChanged
+        )
+    }
+
+    // Flush/Queue mode radio group (only shown when enabled)
+    AnimatedVisibility(visible = autoReadEnabled) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .selectableGroup()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = autoReadFlushMode,
+                        onClick = { onAutoReadFlushModeChanged(true) },
+                        role = Role.RadioButton
+                    )
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = autoReadFlushMode,
+                    onClick = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Flush mode (default)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Stop current speech, read new immediately",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = !autoReadFlushMode,
+                        onClick = { onAutoReadFlushModeChanged(false) },
+                        role = Role.RadioButton
+                    )
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = !autoReadFlushMode,
+                    onClick = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Queue mode",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Add to speech queue after current finishes",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Auto-read works with capture regions flagged as 'auto-read'. Use the pencil icon on the floating bubble to configure regions.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+// ==================== Existing Helper Composables ====================
 
 /**
  * Reusable API key text field with toggle visibility.

@@ -7,8 +7,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.dstranslator.ui.main.MainScreen
 import com.dstranslator.ui.main.MainViewModel
 import com.dstranslator.ui.region.RegionSetupScreen
@@ -59,11 +61,21 @@ fun NavGraph(
                 onWordLookup = viewModel::onWordLookup
             )
         }
-        composable("settings") {
+        composable(
+            route = "settings?section={section}",
+            arguments = listOf(
+                navArgument("section") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val section = backStackEntry.arguments?.getString("section") ?: ""
             val viewModel: SettingsViewModel = hiltViewModel()
             SettingsScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                scrollToProfiles = (section == "profiles")
             )
         }
         composable("region_setup") {

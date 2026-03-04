@@ -19,6 +19,7 @@ import android.view.WindowManager
 import com.dstranslator.R
 import com.dstranslator.data.capture.OcrPreprocessor
 import com.dstranslator.data.capture.ScreenCaptureManager
+import com.dstranslator.data.db.ProfileDao
 import com.dstranslator.data.dictionary.JMdictRepository
 import com.dstranslator.data.segmentation.FuriganaResolver
 import com.dstranslator.data.segmentation.SudachiSegmenter
@@ -69,6 +70,7 @@ class CaptureService : Service() {
     @Inject lateinit var screenCaptureManager: ScreenCaptureManager
     @Inject lateinit var ocrPreprocessor: OcrPreprocessor
     @Inject lateinit var translationHistoryDao: TranslationHistoryDao
+    @Inject lateinit var profileDao: ProfileDao
     @Inject lateinit var sudachiSegmenter: SudachiSegmenter
     @Inject lateinit var furiganaResolver: FuriganaResolver
     @Inject lateinit var jmdictRepository: JMdictRepository
@@ -137,6 +139,11 @@ class CaptureService : Service() {
 
         // Initialize TTS
         ttsManager.initialize()
+
+        // Ensure default profile exists on first launch
+        serviceScope.launch {
+            settingsRepository.ensureDefaultProfile(profileDao)
+        }
 
         // Initialize Sudachi segmenter (async, non-blocking)
         serviceScope.launch {
