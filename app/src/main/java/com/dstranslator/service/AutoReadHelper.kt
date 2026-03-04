@@ -30,8 +30,10 @@ object AutoReadHelper {
         previousText: String?,
         autoReadEnabled: Boolean
     ): Boolean {
-        // TODO: implement
-        return false
+        return autoReadEnabled &&
+                region.autoRead &&
+                currentText.isNotBlank() &&
+                currentText != (previousText ?: "")
     }
 
     /**
@@ -41,7 +43,6 @@ object AutoReadHelper {
      * @return TextToSpeech.QUEUE_FLUSH or TextToSpeech.QUEUE_ADD
      */
     fun getQueueMode(flushMode: Boolean): Int {
-        // TODO: implement
-        return TextToSpeech.QUEUE_FLUSH
+        return if (flushMode) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
     }
 }

@@ -14,6 +14,7 @@ import android.view.WindowManager
 import android.widget.ImageView
 import com.dstranslator.R
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.ui.main.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,9 @@ import kotlinx.coroutines.runBlocking
  * - Play button: Starts continuous capture mode
  * - Stop button: Stops continuous capture mode
  * - Camera button: Triggers a single capture with pulse animation
+ * - Pencil button: Opens region edit overlay (with permission guard)
+ * - Auto-read button: Toggles auto-read on/off
+ * - Profile button: Opens settings/profiles section
  *
  * Observes CaptureService.isContinuousActive to change bubble appearance
  * when continuous mode is active (teal background indicator).
@@ -46,11 +50,25 @@ class FloatingButtonService : Service() {
     // SettingsRepository created manually since this service is not Hilt-injected
     private lateinit var settingsRepository: SettingsRepository
 
-    // View references
+    // View references -- original buttons
     private lateinit var btnBubble: ImageView
     private lateinit var btnContinuousStart: ImageView
     private lateinit var btnContinuousStop: ImageView
     private lateinit var btnSingleCapture: ImageView
+
+    // View references -- new buttons (Phase 4)
+    private lateinit var btnRegionEdit: ImageView
+    private lateinit var btnAutoReadToggle: ImageView
+    private lateinit var btnProfile: ImageView
+
+    // Region edit overlay (non-null while overlay is visible)
+    private var regionEditOverlay: RegionEditOverlay? = null
+
+    // Auto-read state tracking
+    private var isAutoReadActive = false
+
+    // Pending region edit flag: set when capture permission needs to be granted first
+    private var pendingRegionEdit = false
 
     // Menu state
     private var isExpanded = false
@@ -62,7 +80,7 @@ class FloatingButtonService : Service() {
     private var initialTouchY = 0f
     private var isDragging = false
 
-    // Coroutine scope for observing continuous mode state
+    // Coroutine scope for observing state
     private val observerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -76,11 +94,16 @@ class FloatingButtonService : Service() {
         // Inflate the expandable bubble menu layout
         menuView = LayoutInflater.from(this).inflate(R.layout.floating_bubble_menu, null)
 
-        // Find view references
+        // Find view references -- original buttons
         btnBubble = menuView.findViewById(R.id.btn_bubble)
         btnContinuousStart = menuView.findViewById(R.id.btn_continuous_start)
         btnContinuousStop = menuView.findViewById(R.id.btn_continuous_stop)
         btnSingleCapture = menuView.findViewById(R.id.btn_single_capture)
+
+        // Find view references -- new buttons
+        btnRegionEdit = menuView.findViewById(R.id.btn_region_edit)
+        btnAutoReadToggle = menuView.findViewById(R.id.btn_auto_read_toggle)
+        btnProfile = menuView.findViewById(R.id.btn_profile)
 
         // Configure window parameters for overlay.
         // FLAG_SECURE prevents this overlay from appearing in MediaProjection
@@ -105,7 +128,7 @@ class FloatingButtonService : Service() {
         // Set up touch listener on the main bubble for drag and tap (expand/collapse)
         btnBubble.setOnTouchListener(::onBubbleTouch)
 
-        // Set up click listeners for action buttons
+        // Set up click listeners for original action buttons
         btnContinuousStart.setOnClickListener {
             sendCaptureAction(CaptureService.ACTION_START_CONTINUOUS)
             collapseMenu()
@@ -122,6 +145,34 @@ class FloatingButtonService : Service() {
             collapseMenu()
         }
 
+        // --- New button click listeners (Phase 4) ---
+
+        // Pencil button: Region edit with permission guard
+        btnRegionEdit.setOnClickListener {
+            handleRegionEditClick()
+            collapseMenu()
+        }
+
+        // Auto-read toggle: Toggle via SettingsRepository
+        btnAutoReadToggle.setOnClickListener {
+            observerScope.launch {
+                val newState = !isAutoReadActive
+                settingsRepository.setAutoReadEnabled(newState)
+                // State will be updated via the Flow observer below
+            }
+            collapseMenu()
+        }
+
+        // Profile button: Open settings/profiles section
+        btnProfile.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                action = ACTION_OPEN_PROFILES
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            collapseMenu()
+        }
+
         // Observe continuous mode state to change bubble appearance
         observerScope.launch {
             CaptureService.isContinuousActive.collect { isActive ->
@@ -130,8 +181,106 @@ class FloatingButtonService : Service() {
             }
         }
 
+        // Observe auto-read state to update toggle button appearance
+        observerScope.launch {
+            settingsRepository.autoReadEnabledFlow().collect { enabled ->
+                isAutoReadActive = enabled
+                val bgRes = if (enabled) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
+                btnAutoReadToggle.setBackgroundResource(bgRes)
+            }
+        }
+
+        // Observe pipeline state for pending region edit after permission grant
+        observerScope.launch {
+            CaptureService.pipelineState.collect { state ->
+                if (pendingRegionEdit && CaptureService.screenCaptureManagerRef != null) {
+                    pendingRegionEdit = false
+                    openRegionEditOverlay()
+                }
+            }
+        }
+
         // Add menu to window
         windowManager.addView(menuView, params)
+    }
+
+    /**
+     * Handle pencil button click with MediaProjection permission guard.
+     *
+     * If capture permission is already held (screenCaptureManagerRef != null),
+     * opens the RegionEditOverlay immediately. Otherwise, triggers the capture
+     * permission flow via CaptureService/MainActivity and sets a pending flag
+     * to open the overlay after permission is granted.
+     */
+    private fun handleRegionEditClick() {
+        if (CaptureService.screenCaptureManagerRef != null) {
+            // Permission already held -- open overlay immediately
+            openRegionEditOverlay()
+        } else {
+            // Permission not held -- trigger capture permission flow
+            // and set pending flag to open overlay after grant
+            pendingRegionEdit = true
+            sendCaptureAction(CaptureService.ACTION_START)
+        }
+    }
+
+    /**
+     * Create and show the fullscreen RegionEditOverlay.
+     * Loads existing regions, sets up confirm/cancel callbacks.
+     */
+    private fun openRegionEditOverlay() {
+        // Don't open if already showing
+        if (regionEditOverlay != null) return
+
+        val overlay = RegionEditOverlay(this)
+
+        // Load existing regions
+        observerScope.launch {
+            val existingRegions = settingsRepository.getCaptureRegions()
+            overlay.setExistingRegions(existingRegions)
+        }
+
+        // Set up confirm callback: save regions and remove overlay
+        overlay.onRegionsConfirmed = { regions ->
+            observerScope.launch {
+                settingsRepository.saveCaptureRegions(regions)
+            }
+            removeRegionEditOverlay()
+        }
+
+        // Set up cancel callback: just remove overlay
+        overlay.onEditCancelled = {
+            removeRegionEditOverlay()
+        }
+
+        // Add fullscreen overlay to WindowManager
+        // FLAG_NOT_FOCUSABLE: keyboard not needed
+        // FLAG_SECURE: prevents overlay from appearing in screen captures
+        // NOT using FLAG_NOT_TOUCHABLE: overlay must consume all touches
+        val overlayParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_SECURE,
+            PixelFormat.TRANSLUCENT
+        )
+
+        windowManager.addView(overlay, overlayParams)
+        regionEditOverlay = overlay
+    }
+
+    /**
+     * Remove the RegionEditOverlay from WindowManager.
+     */
+    private fun removeRegionEditOverlay() {
+        regionEditOverlay?.let { overlay ->
+            try {
+                windowManager.removeView(overlay)
+            } catch (_: IllegalArgumentException) {
+                // View already removed
+            }
+        }
+        regionEditOverlay = null
     }
 
     @Suppress("ClickableViewAccessibility")
@@ -184,12 +333,15 @@ class FloatingButtonService : Service() {
     }
 
     /**
-     * Expand the bubble menu to show Play, Stop, and Camera action buttons.
+     * Expand the bubble menu to show all 6 action buttons.
      * Animates each button with a staggered cascade effect.
      */
     private fun expandMenu() {
         isExpanded = true
-        val buttons = listOf(btnContinuousStart, btnContinuousStop, btnSingleCapture)
+        val buttons = listOf(
+            btnContinuousStart, btnContinuousStop, btnSingleCapture,
+            btnRegionEdit, btnAutoReadToggle, btnProfile
+        )
 
         buttons.forEachIndexed { index, button ->
             button.visibility = View.VISIBLE
@@ -212,12 +364,15 @@ class FloatingButtonService : Service() {
     }
 
     /**
-     * Collapse the bubble menu to hide the action buttons.
+     * Collapse the bubble menu to hide all action buttons.
      * Animates with reverse cascade effect.
      */
     private fun collapseMenu() {
         isExpanded = false
-        val buttons = listOf(btnSingleCapture, btnContinuousStop, btnContinuousStart)
+        val buttons = listOf(
+            btnProfile, btnAutoReadToggle, btnRegionEdit,
+            btnSingleCapture, btnContinuousStop, btnContinuousStart
+        )
 
         buttons.forEachIndexed { index, button ->
             ObjectAnimator.ofPropertyValuesHolder(
@@ -265,6 +420,7 @@ class FloatingButtonService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        removeRegionEditOverlay()
         observerScope.cancel()
         windowManager.removeView(menuView)
     }
@@ -281,5 +437,8 @@ class FloatingButtonService : Service() {
 
         /** Stagger delay between each button animation in milliseconds */
         private const val STAGGER_DELAY_MS = 30
+
+        /** Intent action to open profiles section in MainActivity */
+        const val ACTION_OPEN_PROFILES = "com.dstranslator.action.OPEN_PROFILES"
     }
 }

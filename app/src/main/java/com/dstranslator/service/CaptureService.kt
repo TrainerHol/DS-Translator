@@ -12,6 +12,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.IBinder
 import android.util.DisplayMetrics
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
@@ -80,6 +81,9 @@ class CaptureService : Service() {
     private var previousOcrText: String = ""
     private var currentSessionId: String = UUID.randomUUID().toString()
     private var historyCollectionJob: Job? = null
+
+    /** Per-region text tracking for auto-read (replaces global previousOcrText for auto-read decisions) */
+    private val previousRegionTexts = mutableMapOf<String, String>()
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -330,15 +334,20 @@ class CaptureService : Service() {
                 if (single != null) listOf(single) else listOf(null)
             }
 
-            // Collect text blocks from all regions
+            // Collect text blocks from all regions, tracking per-region text for auto-read
             val allTextBlocks = mutableListOf<OcrTextBlock>()
             val preprocessedBitmaps = mutableListOf<android.graphics.Bitmap>()
+            val regionTextMap = mutableMapOf<String, String>()
 
             for (region in regions) {
                 val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
                 preprocessedBitmaps.add(preprocessed)
                 val textBlocks = ocrEngine.recognize(preprocessed)
                 allTextBlocks.addAll(textBlocks)
+                // Track per-region OCR text for auto-read
+                if (region != null) {
+                    regionTextMap[region.id] = textBlocks.joinToString("") { it.text }.trim()
+                }
             }
 
             val currentText = allTextBlocks.joinToString("\n") { it.text }.trim()
@@ -403,6 +412,23 @@ class CaptureService : Service() {
             // Room Flow collection (historyCollectionJob) automatically updates _translations
             // No manual list update needed
 
+            // Auto-read hook: check each region for text changes and speak via TTS
+            val autoReadEnabled = settingsRepository.getAutoReadEnabled()
+            if (autoReadEnabled) {
+                val flushMode = settingsRepository.getAutoReadFlushMode()
+                val queueMode = AutoReadHelper.getQueueMode(flushMode)
+                for (region in regions) {
+                    if (region != null) {
+                        val regionText = regionTextMap[region.id] ?: ""
+                        val previousText = previousRegionTexts[region.id]
+                        if (AutoReadHelper.shouldAutoRead(region, regionText, previousText, autoReadEnabled)) {
+                            previousRegionTexts[region.id] = regionText
+                            ttsManager.speak(regionText, queueMode)
+                        }
+                    }
+                }
+            }
+
             _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
 
             // Recycle bitmaps
@@ -423,6 +449,7 @@ class CaptureService : Service() {
     private fun startContinuousCapture() {
         continuousCaptureJob?.cancel()
         previousOcrText = ""  // Reset change detection
+        previousRegionTexts.clear()  // Reset per-region auto-read tracking
         _isContinuousActive.value = true
         _currentSessionId.value = currentSessionId
 
@@ -481,6 +508,7 @@ class CaptureService : Service() {
         const val ACTION_STOP = "com.dstranslator.action.STOP"
         const val ACTION_START_CONTINUOUS = "com.dstranslator.action.START_CONTINUOUS"
         const val ACTION_STOP_CONTINUOUS = "com.dstranslator.action.STOP_CONTINUOUS"
+        const val ACTION_OPEN_REGION_EDIT = "com.dstranslator.action.OPEN_REGION_EDIT"
 
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_DATA = "extra_data"

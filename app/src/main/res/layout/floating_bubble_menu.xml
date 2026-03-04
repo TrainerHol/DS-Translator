@@ -49,4 +49,40 @@
         android:padding="8dp"
         android:visibility="gone"
         android:contentDescription="Single capture" />
+
+    <!-- Region edit (pencil) button -->
+    <ImageView
+        android:id="@+id/btn_region_edit"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_floating_button"
+        android:src="@android:drawable/ic_menu_edit"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:contentDescription="Edit capture regions" />
+
+    <!-- Auto-read toggle button -->
+    <ImageView
+        android:id="@+id/btn_auto_read_toggle"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_floating_button"
+        android:src="@android:drawable/ic_btn_speak_now"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:contentDescription="Toggle auto-read" />
+
+    <!-- Profile management button -->
+    <ImageView
+        android:id="@+id/btn_profile"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_floating_button"
+        android:src="@android:drawable/ic_menu_manage"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:contentDescription="Profiles" />
 </LinearLayout>
