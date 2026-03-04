@@ -51,11 +51,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Overlay
 
-- [ ] **OVLY-01**: Floating bubble overlay via SYSTEM_ALERT_WINDOW for dual-screen games
+- [x] **OVLY-01**: Floating bubble overlay via SYSTEM_ALERT_WINDOW for dual-screen games
 - [ ] **OVLY-02**: Expandable translation panel from bubble with full translation capabilities
-- [ ] **OVLY-03**: Detected words/phrases as interactive buttons (tap for translation + audio)
-- [ ] **OVLY-04**: Touch passthrough when overlay is not actively interacted with
-- [ ] **OVLY-05**: Overlay toggle — show/hide via bubble without interrupting gameplay
+- [x] **OVLY-03**: Detected words/phrases as interactive buttons (tap for translation + audio)
+- [x] **OVLY-04**: Touch passthrough when overlay is not actively interacted with
+- [x] **OVLY-05**: Overlay toggle — show/hide via bubble without interrupting gameplay
 
 ### Settings
 
@@ -126,11 +126,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LRNG-03 | Phase 3 | Complete |
 | LRNG-04 | Phase 3 | Complete |
 | LRNG-05 | Phase 3 | Complete |
-| OVLY-01 | Phase 5 | Pending |
+| OVLY-01 | Phase 5 | Complete |
 | OVLY-02 | Phase 5 | Pending |
-| OVLY-03 | Phase 5 | Pending |
-| OVLY-04 | Phase 5 | Pending |
-| OVLY-05 | Phase 5 | Pending |
+| OVLY-03 | Phase 5 | Complete |
+| OVLY-04 | Phase 5 | Complete |
+| OVLY-05 | Phase 5 | Complete |
 | SETT-01 | Phase 1 | Complete |
 | SETT-02 | Phase 2 | Complete |
 | SETT-03 | Phase 4 | Complete |

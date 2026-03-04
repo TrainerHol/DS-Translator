@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 5 context gathered
-last_updated: "2026-03-04T06:45:36.361Z"
-last_activity: 2026-03-04 -- Plan 04-03 executed (profiles UI, auto-read settings, deep link, intent handling)
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-04T07:34:11.911Z"
+last_activity: 2026-03-04 -- Plan 05-01 executed (overlay domain models, coordinate mapper, state machine, settings)
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 12
-  completed_plans: 10
-  percent: 83
+  total_plans: 15
+  completed_plans: 11
+  percent: 73
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 5 of 5 (Overlay Mode)
-Plan: 1 of ? in current phase
-Status: Phase 4 complete (all 3 plans), ready for Phase 5
-Last activity: 2026-03-04 -- Plan 04-03 executed (profiles UI, auto-read settings, deep link, intent handling)
+Plan: 2 of 3 in current phase
+Status: Plan 05-01 complete (overlay domain foundation)
+Last activity: 2026-03-04 -- Plan 05-01 executed (overlay domain models, coordinate mapper, state machine, settings)
 
-Progress: [████████░░] 83%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [████████░░] 83%
 | Phase 04 P01 | 6 | 2 tasks | 14 files |
 | Phase 04 P02 | 5 | 2 tasks | 6 files |
 | Phase 04 P03 | 5 | 2 tasks | 6 files |
+| Phase 05 P01 | 7 | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [04-03]: singleTask launchMode on MainActivity for OPEN_PROFILES intent reuse
 - [04-03]: NavGraph parameterized route settings?section={section} with empty default for backward compat
 - [04-03]: ProfileCard uses three-dot DropdownMenu (not long press) for discoverable actions
+- [Phase 05-01]: ScreenBounds data class instead of android.graphics.Rect for unit-testable coordinate mapper return type
+- [Phase 05-01]: Added testOptions.unitTests.isReturnDefaultValues for Android stub test compatibility
+- [Phase 05-01]: jmdictRepositoryRef follows existing screenCaptureManagerRef pattern for non-Hilt service access
 
 ### Pending Todos
 
@@ -118,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T06:45:36.353Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-overlay-mode/05-CONTEXT.md
+Last session: 2026-03-04T07:34:11.909Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
