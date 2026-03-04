@@ -107,6 +107,34 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // --- Translation engine selection (DataStore) ---
+
+    suspend fun getTranslationEngine(): String? {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_TRANSLATION_ENGINE] }
+            .first()
+    }
+
+    suspend fun setTranslationEngine(name: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_TRANSLATION_ENGINE] = name
+        }
+    }
+
+    // --- Furigana mode (DataStore) ---
+
+    suspend fun getFuriganaMode(): String {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_FURIGANA_MODE] ?: DEFAULT_FURIGANA_MODE }
+            .first()
+    }
+
+    suspend fun setFuriganaMode(mode: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_FURIGANA_MODE] = mode
+        }
+    }
+
     // --- DataStore for other settings ---
 
     suspend fun getTtsVoiceName(): String? {
@@ -212,7 +240,10 @@ class SettingsRepository @Inject constructor(
         private val PREF_CAPTURE_INTERVAL = longPreferencesKey("capture_interval_ms")
         private val PREF_OPENAI_BASE_URL = stringPreferencesKey("openai_base_url")
         private val PREF_OPENAI_MODEL = stringPreferencesKey("openai_model")
+        private val PREF_TRANSLATION_ENGINE = stringPreferencesKey("translation_engine")
+        private val PREF_FURIGANA_MODE = stringPreferencesKey("furigana_mode")
 
+        const val DEFAULT_FURIGANA_MODE = "all"
         const val DEFAULT_CAPTURE_INTERVAL_MS = 2000L
         const val MIN_CAPTURE_INTERVAL_MS = 500L
         const val MAX_CAPTURE_INTERVAL_MS = 10000L

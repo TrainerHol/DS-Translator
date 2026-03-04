@@ -6,26 +6,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Orchestrates translation with cache-first lookup, then DeepL-primary and ML Kit-fallback chain.
+ * Orchestrates translation with cache-first lookup and user-selectable engine routing.
  *
  * Lookup order:
  * 1. Check two-tier cache (LRU in-memory -> Room database)
- * 2. If cache miss and no DeepL API key -> use ML Kit directly
- * 3. Try DeepL translation
- * 4. On DeepL failure -> fall back to ML Kit
- * 5. On ML Kit failure -> return error message
- * 6. On successful API translation -> store in cache for future lookups
+ * 2. Route to user-selected engine (DeepL, OpenAI, or Claude)
+ * 3. On engine failure -> fall back to ML Kit
+ * 4. On ML Kit failure -> return error message
+ * 5. On successful translation -> store in cache for future lookups
  */
 @Singleton
 class TranslationManager @Inject constructor(
     private val deepLEngine: DeepLTranslationEngine,
+    private val openAiEngine: OpenAiTranslationEngine,
+    private val claudeEngine: ClaudeTranslationEngine,
     private val mlKitEngine: MlKitTranslationEngine,
     private val settingsRepository: SettingsRepository,
     private val translationCache: TranslationCache
 ) {
     /**
-     * Translate Japanese text to English using cache-first, then DeepL-primary, ML Kit-fallback chain.
-     * Always returns a result (never throws) -- on total failure, returns an error message string.
+     * Translate Japanese text to English using cache-first, then user-selected engine,
+     * with ML Kit fallback. Always returns a result (never throws) -- on total failure,
+     * returns an error message string.
      */
     suspend fun translate(text: String): String {
         // Check cache first
@@ -33,7 +35,7 @@ class TranslationManager @Inject constructor(
             return cached
         }
 
-        // Cache miss -- call translation API (existing fallback chain)
+        // Cache miss -- call translation API via selected engine
         val result = translateViaApi(text)
 
         // Store in cache if translation succeeded (not an error message)
@@ -45,21 +47,19 @@ class TranslationManager @Inject constructor(
     }
 
     /**
-     * Translate via API with DeepL-primary, ML Kit-fallback chain.
+     * Translate via the user-selected engine with ML Kit fallback on failure.
      */
     private suspend fun translateViaApi(text: String): String {
-        val apiKey = settingsRepository.getDeepLApiKey()
-
-        // If no API key, go straight to ML Kit
-        if (apiKey.isNullOrBlank()) {
-            return translateWithMlKit(text)
+        val engine = when (settingsRepository.getTranslationEngine()) {
+            "openai" -> openAiEngine
+            "claude" -> claudeEngine
+            else -> deepLEngine  // "deepl" or null default
         }
 
-        // Try DeepL first
         return try {
-            deepLEngine.translate(text)
+            engine.translate(text)
         } catch (e: Exception) {
-            // DeepL failed, fall back to ML Kit
+            // Fall back to ML Kit on any engine failure
             translateWithMlKit(text)
         }
     }
