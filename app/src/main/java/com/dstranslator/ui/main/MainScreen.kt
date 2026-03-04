@@ -31,11 +31,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.dstranslator.domain.model.DictionaryResult
 import com.dstranslator.domain.model.PipelineState
+import com.dstranslator.domain.model.SegmentedWord
+import com.dstranslator.domain.model.TranslationEntry
+import com.dstranslator.ui.presentation.TranslationListScreen
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Primary app screen with start/stop capture controls, pipeline status display,
  * and navigation to settings and region setup.
+ *
+ * When capturing is active, switches to a compact top bar with an embedded
+ * TranslationListScreen showing translations in real-time.
  */
 @Composable
 fun MainScreen(
@@ -43,7 +51,9 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToRegionSetup: () -> Unit,
     onStartCapture: () -> Unit,
-    onStopCapture: () -> Unit
+    onStopCapture: () -> Unit,
+    onPlayAudio: (String) -> Unit,
+    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
 ) {
     val pipelineState by viewModel.pipelineState.collectAsState()
     val isCapturing by viewModel.isCapturing.collectAsState()
@@ -55,109 +65,206 @@ fun MainScreen(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        if (isCapturing) {
+            CapturingLayout(
+                pipelineState = pipelineState,
+                translationCount = translationCount,
+                translations = viewModel.translations,
+                onStopCapture = onStopCapture,
+                onNavigateToSettings = onNavigateToSettings,
+                onPlayAudio = onPlayAudio,
+                onWordLookup = onWordLookup
+            )
+        } else {
+            IdleLayout(
+                pipelineState = pipelineState,
+                translationCount = translationCount,
+                hasRegion = hasRegion,
+                hasApiKey = hasApiKey,
+                onStartCapture = onStartCapture,
+                onNavigateToSettings = onNavigateToSettings,
+                onNavigateToRegionSetup = onNavigateToRegionSetup
+            )
+        }
+    }
+}
+
+/**
+ * Layout shown when capturing: compact top bar + embedded translation list.
+ */
+@Composable
+private fun CapturingLayout(
+    pipelineState: PipelineState,
+    translationCount: Int,
+    translations: StateFlow<List<TranslationEntry>>,
+    onStopCapture: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onPlayAudio: (String) -> Unit,
+    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Compact top bar
+        Surface(
+            tonalElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // App title
-            Spacer(modifier = Modifier.height(32.dp))
-            Text(
-                text = "DS Translator",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            Spacer(modifier = Modifier.height(48.dp))
-
-            // Status section
-            StatusSection(pipelineState = pipelineState)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Translation count
-            Text(
-                text = "$translationCount translations this session",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Warning chips
-            if (!hasApiKey) {
-                WarningChip(text = "No DeepL key -- using on-device translation")
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-            if (!hasRegion) {
-                WarningChip(text = "No capture region set")
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Primary action button
-            if (isCapturing) {
-                Button(
-                    onClick = onStopCapture,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Stop,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Stop Capture", style = MaterialTheme.typography.titleMedium)
-                }
-            } else {
-                FilledTonalButton(
-                    onClick = onStartCapture,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Start Capture", style = MaterialTheme.typography.titleMedium)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Secondary action buttons
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FilledTonalButton(onClick = onNavigateToRegionSetup) {
-                    Icon(
-                        imageVector = Icons.Default.CropFree,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Set Region")
-                }
+                // Status indicator
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = when (pipelineState) {
+                        is PipelineState.ContinuousActive -> "Capturing"
+                        is PipelineState.Processing -> "Processing..."
+                        is PipelineState.Done -> "Waiting..."
+                        else -> "Active"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "$translationCount",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
                 IconButton(onClick = onNavigateToSettings) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Button(onClick = onStopCapture) {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Stop")
+                }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
+
+        // Embedded translation list fills remaining space
+        TranslationListScreen(
+            translations = translations,
+            onPlayAudio = onPlayAudio,
+            onWordLookup = onWordLookup
+        )
+    }
+}
+
+/**
+ * Layout shown when idle: full control panel with status, buttons, and warnings.
+ */
+@Composable
+private fun IdleLayout(
+    pipelineState: PipelineState,
+    translationCount: Int,
+    hasRegion: Boolean,
+    hasApiKey: Boolean,
+    onStartCapture: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToRegionSetup: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // App title
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "DS Translator",
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        // Status section
+        StatusSection(pipelineState = pipelineState)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Translation count
+        Text(
+            text = "$translationCount translations this session",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Warning chips
+        if (!hasApiKey) {
+            WarningChip(text = "No DeepL key -- using on-device translation")
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        if (!hasRegion) {
+            WarningChip(text = "No capture region set")
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Primary action button
+        FilledTonalButton(
+            onClick = onStartCapture,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Start Capture", style = MaterialTheme.typography.titleMedium)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Secondary action buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalButton(onClick = onNavigateToRegionSetup) {
+                Icon(
+                    imageVector = Icons.Default.CropFree,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Set Region")
+            }
+            IconButton(onClick = onNavigateToSettings) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

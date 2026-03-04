@@ -2,8 +2,12 @@ package com.dstranslator.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dstranslator.data.dictionary.JMdictRepository
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.data.tts.TtsManager
+import com.dstranslator.domain.model.DictionaryResult
 import com.dstranslator.domain.model.PipelineState
+import com.dstranslator.domain.model.SegmentedWord
 import com.dstranslator.domain.model.TranslationEntry
 import com.dstranslator.service.CaptureService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +26,9 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val ttsManager: TtsManager,
+    private val jmdictRepository: JMdictRepository
 ) : ViewModel() {
 
     /** Current pipeline state from CaptureService companion */
@@ -54,5 +60,15 @@ class MainViewModel @Inject constructor(
             _hasRegion.value = settingsRepository.getCaptureRegion() != null
             _hasApiKey.value = !settingsRepository.getDeepLApiKey().isNullOrBlank()
         }
+    }
+
+    /** Play Japanese text aloud via TTS */
+    fun onPlayAudio(text: String) {
+        ttsManager.speak(text)
+    }
+
+    /** Look up a segmented word in the dictionary */
+    suspend fun onWordLookup(word: SegmentedWord): List<DictionaryResult> {
+        return jmdictRepository.lookupWord(word.dictionaryForm)
     }
 }

@@ -36,7 +36,9 @@ fun NavGraph(
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToRegionSetup = { navController.navigate("region_setup") },
                 onStartCapture = onStartCapture,
-                onStopCapture = onStopCapture
+                onStopCapture = onStopCapture,
+                onPlayAudio = viewModel::onPlayAudio,
+                onWordLookup = viewModel::onWordLookup
             )
         }
         composable("settings") {
