@@ -212,7 +212,7 @@ private fun IdleLayout(
 
         // Warning chips
         if (!hasApiKey) {
-            WarningChip(text = "No DeepL key -- using on-device translation")
+            WarningChip(text = "No API key configured -- using on-device translation")
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (!hasRegion) {

@@ -14,6 +14,10 @@ import javax.inject.Singleton
 /**
  * Manages MediaProjection session and ImageReader for screen capture.
  * Wraps the Android MediaProjection API to provide a simple screenshot acquisition interface.
+ *
+ * Uses VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR to mirror the device's default display content.
+ * The app's own window uses FLAG_SECURE to exclude itself from capture, preventing
+ * a self-translation feedback loop.
  */
 @Singleton
 class ScreenCaptureManager @Inject constructor() {
@@ -30,8 +34,11 @@ class ScreenCaptureManager @Inject constructor() {
      * @param width Screen width in pixels
      * @param height Screen height in pixels
      * @param density Screen density in DPI
+     * @param displayId Optional display ID to target. Pass null to use default display.
+     *                  Note: MediaProjection always captures the default display content;
+     *                  this parameter is reserved for future multi-display capture support.
      */
-    fun setup(mediaProjection: MediaProjection, width: Int, height: Int, density: Int) {
+    fun setup(mediaProjection: MediaProjection, width: Int, height: Int, density: Int, displayId: Int? = null) {
         screenWidth = width
         screenHeight = height
 

@@ -16,6 +16,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -161,7 +163,16 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    /**
+     * Get the first/default capture region. Returns null if no regions are configured.
+     * This is the backward-compatible method used by the single-region pipeline.
+     */
     suspend fun getCaptureRegion(): CaptureRegion? {
+        // Try multi-region storage first
+        val regions = getCaptureRegions()
+        if (regions.isNotEmpty()) return regions.first()
+
+        // Fall back to legacy single-region storage
         return context.dataStore.data
             .map { prefs ->
                 val x = prefs[PREF_REGION_X]
@@ -177,6 +188,9 @@ class SettingsRepository @Inject constructor(
             .first()
     }
 
+    /**
+     * Save a single capture region. For backward compatibility, also updates legacy keys.
+     */
     suspend fun setCaptureRegion(region: CaptureRegion) {
         context.dataStore.edit { prefs ->
             prefs[PREF_REGION_X] = region.x
@@ -184,6 +198,84 @@ class SettingsRepository @Inject constructor(
             prefs[PREF_REGION_W] = region.width
             prefs[PREF_REGION_H] = region.height
         }
+        // Also save to multi-region storage (replaces default region)
+        val existing = getCaptureRegions().toMutableList()
+        val defaultIndex = existing.indexOfFirst { it.id == "default" || it.id == region.id }
+        if (defaultIndex >= 0) {
+            existing[defaultIndex] = region.copy(id = region.id.ifBlank { "default" })
+        } else {
+            existing.add(0, region.copy(id = if (region.id.isBlank()) "default" else region.id))
+        }
+        saveCaptureRegions(existing)
+    }
+
+    /**
+     * Get all capture regions. Returns empty list if none configured.
+     */
+    suspend fun getCaptureRegions(): List<CaptureRegion> {
+        val json = context.dataStore.data
+            .map { prefs -> prefs[PREF_CAPTURE_REGIONS] }
+            .first() ?: return emptyList()
+
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                CaptureRegion(
+                    x = obj.getInt("x"),
+                    y = obj.getInt("y"),
+                    width = obj.getInt("width"),
+                    height = obj.getInt("height"),
+                    id = obj.optString("id", "default"),
+                    label = obj.optString("label", "")
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Save all capture regions as a JSON array.
+     */
+    suspend fun saveCaptureRegions(regions: List<CaptureRegion>) {
+        val array = JSONArray()
+        regions.forEach { region ->
+            val obj = JSONObject().apply {
+                put("x", region.x)
+                put("y", region.y)
+                put("width", region.width)
+                put("height", region.height)
+                put("id", region.id)
+                put("label", region.label)
+            }
+            array.put(obj)
+        }
+        context.dataStore.edit { prefs ->
+            prefs[PREF_CAPTURE_REGIONS] = array.toString()
+        }
+    }
+
+    /**
+     * Add a new capture region.
+     */
+    suspend fun addCaptureRegion(region: CaptureRegion): CaptureRegion {
+        val regions = getCaptureRegions().toMutableList()
+        val newRegion = region.copy(
+            id = if (region.id.isBlank()) java.util.UUID.randomUUID().toString() else region.id
+        )
+        regions.add(newRegion)
+        saveCaptureRegions(regions)
+        return newRegion
+    }
+
+    /**
+     * Remove a capture region by ID.
+     */
+    suspend fun removeCaptureRegion(regionId: String) {
+        val regions = getCaptureRegions().toMutableList()
+        regions.removeAll { it.id == regionId }
+        saveCaptureRegions(regions)
     }
 
     suspend fun getFloatingButtonPosition(): Pair<Int, Int>? {
@@ -242,6 +334,7 @@ class SettingsRepository @Inject constructor(
         private val PREF_OPENAI_MODEL = stringPreferencesKey("openai_model")
         private val PREF_TRANSLATION_ENGINE = stringPreferencesKey("translation_engine")
         private val PREF_FURIGANA_MODE = stringPreferencesKey("furigana_mode")
+        private val PREF_CAPTURE_REGIONS = stringPreferencesKey("capture_regions_json")
 
         const val DEFAULT_FURIGANA_MODE = "all"
         const val DEFAULT_CAPTURE_INTERVAL_MS = 2000L

@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -188,10 +189,15 @@ private fun CaptureScreenshotSection(viewModel: RegionSetupViewModel) {
  * The overlay shows:
  * - Semi-transparent dark overlay outside the crop region
  * - Primary-colored border around the crop region
- * - Four corner drag handles (filled circles)
+ * - Four corner drag handles (filled circles) with enlarged touch targets
  *
  * All coordinate math converts between display coordinates and bitmap coordinates
  * using a scale factor derived from the displayed image size.
+ *
+ * IMPORTANT: The pointerInput key must be stable (Unit) -- NOT the region itself.
+ * Using region as the key causes the gesture detector to restart on every drag
+ * movement, making dragging nearly impossible. Instead, we read the current
+ * region from a mutable state reference inside the gesture lambda.
  */
 @Composable
 private fun ScreenshotWithCropOverlay(
@@ -214,6 +220,12 @@ private fun ScreenshotWithCropOverlay(
 
     // Track which handle is being dragged: 0=TL, 1=TR, 2=BL, 3=BR, -1=none
     var activeHandle by remember { mutableIntStateOf(-1) }
+
+    // Mutable state reference for region -- allows pointerInput to read current
+    // region without restarting the gesture detector.
+    var currentRegionState by remember { mutableStateOf(region) }
+    // Keep in sync with external region changes (e.g., reset button)
+    currentRegionState = region
 
     // Minimum region size in bitmap coordinates
     val minSize = 50
@@ -243,18 +255,20 @@ private fun ScreenshotWithCropOverlay(
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(region) {
+                    .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = { offset ->
+                                val r = currentRegionState ?: return@detectDragGestures
+
                                 // Determine which handle is closest
-                                val handleRadius = 32f // touch target in display pixels
+                                val handleRadius = 48f // enlarged touch target in display pixels
                                 val sf = scaleFactor
 
                                 // Convert region corners to display coordinates
-                                val left = region.x / sf
-                                val top = region.y / sf
-                                val right = (region.x + region.width) / sf
-                                val bottom = (region.y + region.height) / sf
+                                val left = r.x / sf
+                                val top = r.y / sf
+                                val right = (r.x + r.width) / sf
+                                val bottom = (r.y + r.height) / sf
 
                                 val handles = listOf(
                                     Offset(left, top),     // TL
@@ -275,6 +289,7 @@ private fun ScreenshotWithCropOverlay(
                                 if (activeHandle < 0) return@detectDragGestures
                                 change.consume()
 
+                                val r = currentRegionState ?: return@detectDragGestures
                                 val sf = scaleFactor
                                 // Convert touch position to bitmap coordinates
                                 val bx = (change.position.x * sf).toInt()
@@ -282,7 +297,6 @@ private fun ScreenshotWithCropOverlay(
                                 val by = (change.position.y * sf).toInt()
                                     .coerceIn(0, bitmapHeight)
 
-                                val r = region
                                 val newRegion = when (activeHandle) {
                                     0 -> { // Top-Left
                                         val newX = bx.coerceAtMost(r.x + r.width - minSize)
@@ -326,6 +340,7 @@ private fun ScreenshotWithCropOverlay(
                                     }
                                     else -> r
                                 }
+                                currentRegionState = newRegion
                                 onRegionChanged(newRegion)
                             },
                             onDragEnd = {
@@ -334,11 +349,12 @@ private fun ScreenshotWithCropOverlay(
                         )
                     }
             ) {
+                val r = currentRegionState ?: return@Canvas
                 val sf = scaleFactor
-                val left = region.x / sf
-                val top = region.y / sf
-                val right = (region.x + region.width) / sf
-                val bottom = (region.y + region.height) / sf
+                val left = r.x / sf
+                val top = r.y / sf
+                val right = (r.x + r.width) / sf
+                val bottom = (r.y + r.height) / sf
 
                 // Draw semi-transparent dark overlay outside the crop region
                 val cropRect = Rect(left, top, right, bottom)
@@ -361,8 +377,8 @@ private fun ScreenshotWithCropOverlay(
                     style = Stroke(width = 2.dp.toPx())
                 )
 
-                // Draw corner handles
-                val handleRadius = 8.dp.toPx()
+                // Draw corner handles - all four corners with larger visual handles
+                val handleRadius = 10.dp.toPx()
                 val corners = listOf(
                     Offset(left, top),
                     Offset(right, top),
@@ -370,6 +386,13 @@ private fun ScreenshotWithCropOverlay(
                     Offset(right, bottom)
                 )
                 corners.forEach { corner ->
+                    // Outer ring for better visibility
+                    drawCircle(
+                        color = Color.White,
+                        radius = handleRadius + 2.dp.toPx(),
+                        center = corner
+                    )
+                    // Filled handle
                     drawCircle(
                         color = primaryColor,
                         radius = handleRadius,

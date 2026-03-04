@@ -51,14 +51,24 @@ class MainViewModel @Inject constructor(
     private val _hasRegion = MutableStateFlow(false)
     val hasRegion: StateFlow<Boolean> = _hasRegion.asStateFlow()
 
-    /** Whether a DeepL API key has been configured */
+    /** Whether any translation API key has been configured */
     private val _hasApiKey = MutableStateFlow(false)
     val hasApiKey: StateFlow<Boolean> = _hasApiKey.asStateFlow()
 
     init {
+        refreshSettings()
+    }
+
+    /**
+     * Re-read settings from repository. Called on init and when returning
+     * from Settings screen so changes take effect immediately without restart.
+     */
+    fun refreshSettings() {
         viewModelScope.launch {
             _hasRegion.value = settingsRepository.getCaptureRegion() != null
             _hasApiKey.value = !settingsRepository.getDeepLApiKey().isNullOrBlank()
+                    || !settingsRepository.getOpenAiApiKey().isNullOrBlank()
+                    || !settingsRepository.getClaudeApiKey().isNullOrBlank()
         }
     }
 

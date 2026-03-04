@@ -25,6 +25,8 @@ import com.dstranslator.data.settings.SettingsRepository
 import com.dstranslator.data.translation.TranslationManager
 import com.dstranslator.data.tts.TtsManager
 import com.dstranslator.domain.engine.OcrEngine
+import com.dstranslator.domain.model.CaptureRegion
+import com.dstranslator.domain.model.OcrTextBlock
 import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.TranslationEntry
 import com.dstranslator.ui.presentation.TranslationPresentation
@@ -300,11 +302,12 @@ class CaptureService : Service() {
     /**
      * Execute the full capture-to-translate pipeline:
      * 1. Capture screenshot
-     * 2. Preprocess bitmap (crop, upscale, grayscale)
-     * 3. Run OCR to extract text blocks
-     * 4. Change detection: skip if identical to previous OCR text
-     * 5. Translate each text block (cache-first via TranslationManager)
-     * 6. Persist to Room history (Flow collection updates translations StateFlow)
+     * 2. For each configured capture region (or full screen if none):
+     *    a. Preprocess bitmap (crop, upscale, grayscale)
+     *    b. Run OCR to extract text blocks
+     * 3. Change detection: skip if identical to previous OCR text
+     * 4. Translate each text block (cache-first via TranslationManager)
+     * 5. Persist to Room history (Flow collection updates translations StateFlow)
      */
     private suspend fun captureAndTranslate() {
         try {
@@ -318,26 +321,42 @@ class CaptureService : Service() {
 
             _pipelineState.value = PipelineState.Processing
 
-            val region = settingsRepository.getCaptureRegion()
-            val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
+            // Get all capture regions; fall back to single region or full screen
+            val multiRegions = settingsRepository.getCaptureRegions()
+            val regions: List<CaptureRegion?> = if (multiRegions.isNotEmpty()) {
+                multiRegions
+            } else {
+                val single = settingsRepository.getCaptureRegion()
+                if (single != null) listOf(single) else listOf(null)
+            }
 
-            val textBlocks = ocrEngine.recognize(preprocessed)
-            val currentText = textBlocks.joinToString("\n") { it.text }.trim()
+            // Collect text blocks from all regions
+            val allTextBlocks = mutableListOf<OcrTextBlock>()
+            val preprocessedBitmaps = mutableListOf<android.graphics.Bitmap>()
+
+            for (region in regions) {
+                val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
+                preprocessedBitmaps.add(preprocessed)
+                val textBlocks = ocrEngine.recognize(preprocessed)
+                allTextBlocks.addAll(textBlocks)
+            }
+
+            val currentText = allTextBlocks.joinToString("\n") { it.text }.trim()
 
             // Change detection: skip if text is identical to previous (consecutive identical = always skip)
             if (currentText == previousOcrText || currentText.isBlank()) {
                 _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
                 // Recycle bitmaps
-                if (preprocessed !== bitmap) {
-                    bitmap.recycle()
+                preprocessedBitmaps.forEach { pp ->
+                    if (pp !== bitmap) pp.recycle()
                 }
-                preprocessed.recycle()
+                bitmap.recycle()
                 return
             }
             previousOcrText = currentText
 
             // Translate each text block, segment, and persist to Room history
-            val newEntries = textBlocks.mapNotNull { block ->
+            val newEntries = allTextBlocks.mapNotNull { block ->
                 if (block.text.isBlank()) return@mapNotNull null
                 val translation = translationManager.translate(block.text)
 
@@ -387,10 +406,10 @@ class CaptureService : Service() {
             _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
 
             // Recycle bitmaps
-            if (preprocessed !== bitmap) {
-                bitmap.recycle()
+            preprocessedBitmaps.forEach { pp ->
+                if (pp !== bitmap) pp.recycle()
             }
-            preprocessed.recycle()
+            bitmap.recycle()
         } catch (e: Exception) {
             Log.e(TAG, "Pipeline error", e)
             _pipelineState.value = PipelineState.Error("Pipeline error: ${e.message}")
