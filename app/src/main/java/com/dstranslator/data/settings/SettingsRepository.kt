@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -11,6 +12,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.dstranslator.data.db.ProfileDao
+import com.dstranslator.data.db.ProfileEntity
 import com.dstranslator.domain.model.CaptureRegion
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -317,6 +320,137 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // --- Auto-read settings ---
+
+    suspend fun getAutoReadEnabled(): Boolean {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_AUTO_READ_ENABLED] ?: false }
+            .first()
+    }
+
+    suspend fun setAutoReadEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_AUTO_READ_ENABLED] = enabled
+        }
+    }
+
+    fun autoReadEnabledFlow(): Flow<Boolean> {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_AUTO_READ_ENABLED] ?: false }
+    }
+
+    suspend fun getAutoReadFlushMode(): Boolean {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_AUTO_READ_FLUSH_MODE] ?: true }
+            .first()
+    }
+
+    suspend fun setAutoReadFlushMode(flush: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_AUTO_READ_FLUSH_MODE] = flush
+        }
+    }
+
+    // --- Active profile tracking ---
+
+    suspend fun getActiveProfileId(): Long? {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_ACTIVE_PROFILE_ID] }
+            .first()
+    }
+
+    suspend fun setActiveProfileId(id: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_ACTIVE_PROFILE_ID] = id
+        }
+    }
+
+    // --- Profile snapshot and restore ---
+
+    /**
+     * Creates a JSON snapshot of all current non-secret settings.
+     * API keys are NOT included (they are global, not per-profile).
+     */
+    suspend fun createSettingsSnapshot(): String {
+        val prefs = context.dataStore.data.first()
+        return JSONObject().apply {
+            put("translationEngine", prefs[PREF_TRANSLATION_ENGINE] ?: "")
+            put("ocrEngine", prefs[PREF_OCR_ENGINE] ?: "")
+            put("ttsVoice", prefs[PREF_TTS_VOICE] ?: "")
+            put("captureIntervalMs", prefs[PREF_CAPTURE_INTERVAL] ?: DEFAULT_CAPTURE_INTERVAL_MS)
+            put("furiganaMode", prefs[PREF_FURIGANA_MODE] ?: DEFAULT_FURIGANA_MODE)
+            put("openAiBaseUrl", prefs[PREF_OPENAI_BASE_URL] ?: "")
+            put("openAiModel", prefs[PREF_OPENAI_MODEL] ?: "")
+            put("autoReadEnabled", prefs[PREF_AUTO_READ_ENABLED] ?: false)
+            put("autoReadFlushMode", prefs[PREF_AUTO_READ_FLUSH_MODE] ?: true)
+        }.toString()
+    }
+
+    /**
+     * Atomically restores all settings from a profile snapshot.
+     * All writes happen in a single DataStore.edit block to prevent partial state.
+     */
+    suspend fun loadSettingsFromSnapshot(settingsJson: String, captureRegionsJson: String) {
+        val settings = JSONObject(settingsJson)
+        context.dataStore.edit { prefs ->
+            prefs[PREF_TRANSLATION_ENGINE] = settings.optString("translationEngine", "")
+            prefs[PREF_OCR_ENGINE] = settings.optString("ocrEngine", "")
+            prefs[PREF_TTS_VOICE] = settings.optString("ttsVoice", "")
+            prefs[PREF_CAPTURE_INTERVAL] = settings.optLong("captureIntervalMs", DEFAULT_CAPTURE_INTERVAL_MS)
+            prefs[PREF_FURIGANA_MODE] = settings.optString("furiganaMode", DEFAULT_FURIGANA_MODE)
+            prefs[PREF_OPENAI_BASE_URL] = settings.optString("openAiBaseUrl", "")
+            prefs[PREF_OPENAI_MODEL] = settings.optString("openAiModel", "")
+            prefs[PREF_AUTO_READ_ENABLED] = settings.optBoolean("autoReadEnabled", false)
+            prefs[PREF_AUTO_READ_FLUSH_MODE] = settings.optBoolean("autoReadFlushMode", true)
+            prefs[PREF_CAPTURE_REGIONS] = captureRegionsJson
+        }
+    }
+
+    /**
+     * Creates the capture regions JSON string from current saved regions.
+     */
+    suspend fun createCaptureRegionsSnapshot(): String {
+        val regions = getCaptureRegions()
+        val array = JSONArray()
+        regions.forEach { region ->
+            val obj = JSONObject().apply {
+                put("x", region.x)
+                put("y", region.y)
+                put("width", region.width)
+                put("height", region.height)
+                put("id", region.id)
+                put("label", region.label)
+                put("autoRead", region.autoRead)
+            }
+            array.put(obj)
+        }
+        return array.toString()
+    }
+
+    /**
+     * Ensures a "Default" profile exists. Called during CaptureService initialization.
+     * Creates one from current settings if no profiles exist.
+     */
+    suspend fun ensureDefaultProfile(profileDao: ProfileDao) {
+        if (profileDao.count() == 0) {
+            val settingsSnapshot = createSettingsSnapshot()
+            val regionsSnapshot = createCaptureRegionsSnapshot()
+            val autoRead = getAutoReadEnabled()
+            val flushMode = getAutoReadFlushMode()
+            profileDao.insert(
+                ProfileEntity(
+                    id = 0,
+                    name = "Default",
+                    isDefault = true,
+                    settingsJson = settingsSnapshot,
+                    captureRegionsJson = regionsSnapshot,
+                    autoReadEnabled = autoRead,
+                    autoReadFlushMode = flushMode
+                )
+            )
+        }
+    }
+
     companion object {
         private const val KEY_DEEPL_API = "deepl_api_key"
         private const val KEY_OPENAI_API = "openai_api_key"
@@ -337,6 +471,9 @@ class SettingsRepository @Inject constructor(
         private val PREF_TRANSLATION_ENGINE = stringPreferencesKey("translation_engine")
         private val PREF_FURIGANA_MODE = stringPreferencesKey("furigana_mode")
         private val PREF_CAPTURE_REGIONS = stringPreferencesKey("capture_regions_json")
+        private val PREF_AUTO_READ_ENABLED = booleanPreferencesKey("auto_read_enabled")
+        private val PREF_AUTO_READ_FLUSH_MODE = booleanPreferencesKey("auto_read_flush_mode")
+        private val PREF_ACTIVE_PROFILE_ID = longPreferencesKey("active_profile_id")
 
         const val DEFAULT_FURIGANA_MODE = "all"
         const val DEFAULT_CAPTURE_INTERVAL_MS = 2000L

@@ -48,10 +48,13 @@ class TtsManager @Inject constructor(
     }
 
     /**
-     * Speak the given Japanese text aloud. Flushes any currently playing speech.
+     * Speak the given Japanese text aloud.
+     * @param text The text to speak
+     * @param queueMode TextToSpeech.QUEUE_FLUSH (default, interrupts current speech)
+     *   or TextToSpeech.QUEUE_ADD (queues after current speech)
      */
-    fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString())
+    fun speak(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
+        tts?.speak(text, queueMode, null, UUID.randomUUID().toString())
     }
 
     /**
