@@ -2,7 +2,6 @@ package com.dstranslator.ui.region
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -44,19 +45,24 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.dstranslator.domain.model.CaptureRegion
 import com.dstranslator.service.CaptureService
 import kotlinx.coroutines.runBlocking
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.changedToUp
 
 /**
  * Region setup screen with frozen screenshot and draggable corner handles.
  *
- * User captures a screenshot of the current game, then drags corner handles
- * to define the text dialog region for OCR. Region is stored in bitmap
- * coordinates and persisted via SettingsRepository.
+ * The screenshot is displayed at full width inside a vertically scrollable
+ * container so both screens of a dual-display device (e.g., AYN Thor) are
+ * accessible. Users scroll to find the game area, then drag corner handles
+ * to define the OCR region.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,33 +111,42 @@ fun RegionSetupScreen(
                 .padding(innerPadding),
             color = MaterialTheme.colorScheme.background
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Position your game to the dialog screen, then drag the handles to select the text region.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
+            val bitmap = screenshotBitmap
+            if (bitmap != null) {
+                // Scrollable column so the full screenshot (both screens) is accessible
+                val scrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Scroll to find the game screen, then drag handles to select the text region.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val bitmap = screenshotBitmap
-                if (bitmap != null) {
-                    // Show screenshot with crop overlay
                     ScreenshotWithCropOverlay(
                         bitmap = bitmap,
                         region = currentRegion,
                         onRegionChanged = { viewModel.updateRegion(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     )
-                } else {
-                    // Show capture button or message
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            } else {
+                // No screenshot yet — show capture button centered
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Spacer(modifier = Modifier.weight(1f))
                     CaptureScreenshotSection(viewModel = viewModel)
                     Spacer(modifier = Modifier.weight(1f))
@@ -143,8 +158,6 @@ fun RegionSetupScreen(
 
 /**
  * Section displayed when no screenshot is available.
- * Provides a button to capture a screenshot from the active MediaProjection session
- * via the CaptureService's static ScreenCaptureManager reference.
  */
 @Composable
 private fun CaptureScreenshotSection(viewModel: RegionSetupViewModel) {
@@ -152,7 +165,6 @@ private fun CaptureScreenshotSection(viewModel: RegionSetupViewModel) {
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (captureManager != null) {
-            // CaptureService is running with an active MediaProjection session
             Button(onClick = {
                 val bitmap = runBlocking {
                     try {
@@ -186,18 +198,12 @@ private fun CaptureScreenshotSection(viewModel: RegionSetupViewModel) {
 /**
  * Displays the screenshot with a draggable crop overlay.
  *
- * The overlay shows:
- * - Semi-transparent dark overlay outside the crop region
- * - Primary-colored border around the crop region
- * - Four corner drag handles (filled circles) with enlarged touch targets
+ * Uses awaitEachGesture to conditionally consume touch events:
+ * - Touch near a handle → enters drag mode, consumes events (scroll won't fire)
+ * - Touch elsewhere → does NOT consume, letting the parent scroll container handle it
  *
- * All coordinate math converts between display coordinates and bitmap coordinates
- * using a scale factor derived from the displayed image size.
- *
- * IMPORTANT: The pointerInput key must be stable (Unit) -- NOT the region itself.
- * Using region as the key causes the gesture detector to restart on every drag
- * movement, making dragging nearly impossible. Instead, we read the current
- * region from a mutable state reference inside the gesture lambda.
+ * This allows scrolling through the full screenshot while still supporting
+ * handle dragging.
  */
 @Composable
 private fun ScreenshotWithCropOverlay(
@@ -221,16 +227,13 @@ private fun ScreenshotWithCropOverlay(
     // Track which handle is being dragged: 0=TL, 1=TR, 2=BL, 3=BR, -1=none
     var activeHandle by remember { mutableIntStateOf(-1) }
 
-    // Mutable state reference for region -- allows pointerInput to read current
-    // region without restarting the gesture detector.
+    // Mutable state reference for region
     var currentRegionState by remember { mutableStateOf(region) }
-    // Keep in sync with external region changes (e.g., reset button)
     currentRegionState = region
 
-    // Minimum region size in bitmap coordinates
     val minSize = 50
-
     val primaryColor = MaterialTheme.colorScheme.primary
+    val handleTouchRadius = 48f // Touch target in display pixels
 
     Box(
         modifier = modifier
@@ -256,97 +259,101 @@ private fun ScreenshotWithCropOverlay(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                val r = currentRegionState ?: return@detectDragGestures
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
 
-                                // Determine which handle is closest
-                                val handleRadius = 48f // enlarged touch target in display pixels
-                                val sf = scaleFactor
+                            val r = currentRegionState ?: return@awaitEachGesture
+                            val sf = scaleFactor
 
-                                // Convert region corners to display coordinates
-                                val left = r.x / sf
-                                val top = r.y / sf
-                                val right = (r.x + r.width) / sf
-                                val bottom = (r.y + r.height) / sf
+                            // Convert region corners to display coordinates
+                            val left = r.x / sf
+                            val top = r.y / sf
+                            val right = (r.x + r.width) / sf
+                            val bottom = (r.y + r.height) / sf
 
-                                val handles = listOf(
-                                    Offset(left, top),     // TL
-                                    Offset(right, top),    // TR
-                                    Offset(left, bottom),  // BL
-                                    Offset(right, bottom)  // BR
-                                )
+                            val handles = listOf(
+                                Offset(left, top),     // TL
+                                Offset(right, top),    // TR
+                                Offset(left, bottom),  // BL
+                                Offset(right, bottom)  // BR
+                            )
 
-                                activeHandle = handles
-                                    .mapIndexed { index, pos ->
-                                        index to (offset - pos).getDistance()
-                                    }
-                                    .filter { it.second < handleRadius }
-                                    .minByOrNull { it.second }
-                                    ?.first ?: -1
-                            },
-                            onDrag = { change, _ ->
-                                if (activeHandle < 0) return@detectDragGestures
+                            val closest = handles
+                                .mapIndexed { index, pos ->
+                                    index to (down.position - pos).getDistance()
+                                }
+                                .filter { it.second < handleTouchRadius }
+                                .minByOrNull { it.second }
+
+                            if (closest == null) {
+                                // Not near any handle — don't consume, let scroll handle it
+                                return@awaitEachGesture
+                            }
+
+                            // Near a handle — consume and start dragging
+                            activeHandle = closest.first
+                            down.consume()
+
+                            // Drag loop
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: break
+                                if (change.changedToUp()) {
+                                    activeHandle = -1
+                                    break
+                                }
                                 change.consume()
 
-                                val r = currentRegionState ?: return@detectDragGestures
-                                val sf = scaleFactor
-                                // Convert touch position to bitmap coordinates
-                                val bx = (change.position.x * sf).toInt()
+                                val cr = currentRegionState ?: break
+                                val s = scaleFactor
+                                val bx = (change.position.x * s).toInt()
                                     .coerceIn(0, bitmapWidth)
-                                val by = (change.position.y * sf).toInt()
+                                val by = (change.position.y * s).toInt()
                                     .coerceIn(0, bitmapHeight)
 
                                 val newRegion = when (activeHandle) {
                                     0 -> { // Top-Left
-                                        val newX = bx.coerceAtMost(r.x + r.width - minSize)
-                                        val newY = by.coerceAtMost(r.y + r.height - minSize)
+                                        val newX = bx.coerceAtMost(cr.x + cr.width - minSize)
+                                        val newY = by.coerceAtMost(cr.y + cr.height - minSize)
                                         CaptureRegion(
-                                            x = newX,
-                                            y = newY,
-                                            width = (r.x + r.width) - newX,
-                                            height = (r.y + r.height) - newY
+                                            x = newX, y = newY,
+                                            width = (cr.x + cr.width) - newX,
+                                            height = (cr.y + cr.height) - newY
                                         )
                                     }
                                     1 -> { // Top-Right
-                                        val newRight = bx.coerceAtLeast(r.x + minSize)
-                                        val newY = by.coerceAtMost(r.y + r.height - minSize)
+                                        val newRight = bx.coerceAtLeast(cr.x + minSize)
+                                        val newY = by.coerceAtMost(cr.y + cr.height - minSize)
                                         CaptureRegion(
-                                            x = r.x,
-                                            y = newY,
-                                            width = newRight - r.x,
-                                            height = (r.y + r.height) - newY
+                                            x = cr.x, y = newY,
+                                            width = newRight - cr.x,
+                                            height = (cr.y + cr.height) - newY
                                         )
                                     }
                                     2 -> { // Bottom-Left
-                                        val newX = bx.coerceAtMost(r.x + r.width - minSize)
-                                        val newBottom = by.coerceAtLeast(r.y + minSize)
+                                        val newX = bx.coerceAtMost(cr.x + cr.width - minSize)
+                                        val newBottom = by.coerceAtLeast(cr.y + minSize)
                                         CaptureRegion(
-                                            x = newX,
-                                            y = r.y,
-                                            width = (r.x + r.width) - newX,
-                                            height = newBottom - r.y
+                                            x = newX, y = cr.y,
+                                            width = (cr.x + cr.width) - newX,
+                                            height = newBottom - cr.y
                                         )
                                     }
                                     3 -> { // Bottom-Right
-                                        val newRight = bx.coerceAtLeast(r.x + minSize)
-                                        val newBottom = by.coerceAtLeast(r.y + minSize)
+                                        val newRight = bx.coerceAtLeast(cr.x + minSize)
+                                        val newBottom = by.coerceAtLeast(cr.y + minSize)
                                         CaptureRegion(
-                                            x = r.x,
-                                            y = r.y,
-                                            width = newRight - r.x,
-                                            height = newBottom - r.y
+                                            x = cr.x, y = cr.y,
+                                            width = newRight - cr.x,
+                                            height = newBottom - cr.y
                                         )
                                     }
-                                    else -> r
+                                    else -> cr
                                 }
                                 currentRegionState = newRegion
                                 onRegionChanged(newRegion)
-                            },
-                            onDragEnd = {
-                                activeHandle = -1
                             }
-                        )
+                        }
                     }
             ) {
                 val r = currentRegionState ?: return@Canvas
@@ -356,11 +363,9 @@ private fun ScreenshotWithCropOverlay(
                 val right = (r.x + r.width) / sf
                 val bottom = (r.y + r.height) / sf
 
-                // Draw semi-transparent dark overlay outside the crop region
+                // Semi-transparent dark overlay outside the crop region
                 val cropRect = Rect(left, top, right, bottom)
-                val cropPath = Path().apply {
-                    addRect(cropRect)
-                }
+                val cropPath = Path().apply { addRect(cropRect) }
                 clipPath(cropPath, clipOp = ClipOp.Difference) {
                     drawRect(
                         color = Color.Black.copy(alpha = 0.6f),
@@ -369,7 +374,7 @@ private fun ScreenshotWithCropOverlay(
                     )
                 }
 
-                // Draw border around crop region
+                // Border around crop region
                 drawRect(
                     color = primaryColor,
                     topLeft = Offset(left, top),
@@ -377,7 +382,7 @@ private fun ScreenshotWithCropOverlay(
                     style = Stroke(width = 2.dp.toPx())
                 )
 
-                // Draw corner handles - all four corners with larger visual handles
+                // Corner handles - all four with white ring
                 val handleRadius = 10.dp.toPx()
                 val corners = listOf(
                     Offset(left, top),
@@ -386,13 +391,11 @@ private fun ScreenshotWithCropOverlay(
                     Offset(right, bottom)
                 )
                 corners.forEach { corner ->
-                    // Outer ring for better visibility
                     drawCircle(
                         color = Color.White,
                         radius = handleRadius + 2.dp.toPx(),
                         center = corner
                     )
-                    // Filled handle
                     drawCircle(
                         color = primaryColor,
                         radius = handleRadius,
