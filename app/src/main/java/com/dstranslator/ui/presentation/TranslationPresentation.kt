@@ -67,30 +67,3 @@ class TranslationPresentation(
         setContentView(composeView)
     }
 }
-
-/**
- * Minimal LifecycleOwner and SavedStateRegistryOwner for Presentation's ComposeView.
- * Presentation doesn't inherently provide these, but ComposeView requires them.
- */
-private class PresentationLifecycleOwner :
-    androidx.lifecycle.LifecycleOwner,
-    androidx.savedstate.SavedStateRegistryOwner {
-
-    private val lifecycleRegistry = androidx.lifecycle.LifecycleRegistry(this)
-    private val savedStateRegistryController =
-        androidx.savedstate.SavedStateRegistryController.create(this)
-
-    init {
-        savedStateRegistryController.performRestore(null)
-    }
-
-    override val lifecycle: androidx.lifecycle.Lifecycle
-        get() = lifecycleRegistry
-
-    override val savedStateRegistry: androidx.savedstate.SavedStateRegistry
-        get() = savedStateRegistryController.savedStateRegistry
-
-    fun handleLifecycleEvent(event: androidx.lifecycle.Lifecycle.Event) {
-        lifecycleRegistry.handleLifecycleEvent(event)
-    }
-}

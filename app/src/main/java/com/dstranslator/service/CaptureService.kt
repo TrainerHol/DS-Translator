@@ -28,6 +28,7 @@ import com.dstranslator.data.translation.TranslationManager
 import com.dstranslator.data.tts.TtsManager
 import com.dstranslator.domain.engine.OcrEngine
 import com.dstranslator.domain.model.CaptureRegion
+import com.dstranslator.domain.model.OcrResult
 import com.dstranslator.domain.model.OcrTextBlock
 import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.TranslationEntry
@@ -137,6 +138,9 @@ class CaptureService : Service() {
         // Expose capture manager for region setup screenshots
         screenCaptureManagerRef = screenCaptureManager
 
+        // Expose JMdict repository for overlay word lookup by non-Hilt services
+        jmdictRepositoryRef = jmdictRepository
+
         // Initialize TTS
         ttsManager.initialize()
 
@@ -213,6 +217,8 @@ class CaptureService : Service() {
         ttsManager.shutdown()
 
         screenCaptureManagerRef = null
+        jmdictRepositoryRef = null
+        _latestOcrResult.value = null
         _pipelineState.value = PipelineState.Idle
 
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -356,6 +362,14 @@ class CaptureService : Service() {
                     regionTextMap[region.id] = textBlocks.joinToString("") { it.text }.trim()
                 }
             }
+
+            // Publish OCR result with coordinate metadata for overlay-on-source positioning
+            _latestOcrResult.value = OcrResult(
+                textBlocks = allTextBlocks.toList(),
+                captureRegion = regions.firstOrNull(),
+                preprocessedWidth = preprocessedBitmaps.firstOrNull()?.width ?: 0,
+                preprocessedHeight = preprocessedBitmaps.firstOrNull()?.height ?: 0
+            )
 
             val currentText = allTextBlocks.joinToString("\n") { it.text }.trim()
 
@@ -504,6 +518,8 @@ class CaptureService : Service() {
         ttsManager.shutdown()
 
         screenCaptureManagerRef = null
+        jmdictRepositoryRef = null
+        _latestOcrResult.value = null
         serviceScope.cancel()
     }
 
@@ -539,8 +555,17 @@ class CaptureService : Service() {
         private val _currentSessionId = MutableStateFlow<String?>(null)
         val currentSessionIdFlow: StateFlow<String?> = _currentSessionId.asStateFlow()
 
+        /** Latest OCR result with coordinate metadata for overlay-on-source positioning */
+        private val _latestOcrResult = MutableStateFlow<OcrResult?>(null)
+        val latestOcrResult: StateFlow<OcrResult?> = _latestOcrResult.asStateFlow()
+
         /** ScreenCaptureManager reference for region setup screenshot acquisition */
         var screenCaptureManagerRef: ScreenCaptureManager? = null
+            private set
+
+        /** JMdict repository reference for overlay word lookup by non-Hilt services (e.g., FloatingButtonService).
+         *  Set by CaptureService.onCreate() after Hilt injection, following the same pattern as screenCaptureManagerRef. */
+        var jmdictRepositoryRef: JMdictRepository? = null
             private set
     }
 }
