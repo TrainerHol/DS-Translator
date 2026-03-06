@@ -13,13 +13,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.dstranslator.ui.main.MainScreen
 import com.dstranslator.ui.main.MainViewModel
-import com.dstranslator.ui.region.RegionSetupScreen
-import com.dstranslator.ui.region.RegionSetupViewModel
 import com.dstranslator.ui.settings.SettingsScreen
 import com.dstranslator.ui.settings.SettingsViewModel
+import com.dstranslator.ui.vocabulary.VocabularyScreen
 
 /**
- * Navigation graph connecting Main, Settings, and RegionSetup screens.
+ * Navigation graph connecting Main, Settings, and Vocabulary screens.
  *
  * @param navController The navigation controller managing the back stack
  * @param onStartCapture Callback to initiate the MediaProjection permission flow
@@ -54,7 +53,7 @@ fun NavGraph(
             MainScreen(
                 viewModel = viewModel,
                 onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToRegionSetup = { navController.navigate("region_setup") },
+                onNavigateToVocabulary = { navController.navigate("vocabulary") },
                 onStartCapture = onStartCapture,
                 onStopCapture = onStopCapture,
                 onPlayAudio = viewModel::onPlayAudio,
@@ -78,10 +77,8 @@ fun NavGraph(
                 scrollToProfiles = (section == "profiles")
             )
         }
-        composable("region_setup") {
-            val viewModel: RegionSetupViewModel = hiltViewModel()
-            RegionSetupScreen(
-                viewModel = viewModel,
+        composable("vocabulary") {
+            VocabularyScreen(
                 onBack = { navController.popBackStack() }
             )
         }

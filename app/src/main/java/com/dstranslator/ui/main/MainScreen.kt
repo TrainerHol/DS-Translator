@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -41,7 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Primary app screen with start/stop capture controls, pipeline status display,
- * and navigation to settings and region setup.
+ * and navigation to settings and session vocabulary.
  *
  * When capturing is active, switches to a compact top bar with an embedded
  * TranslationListScreen showing translations in real-time.
@@ -50,7 +50,7 @@ import kotlinx.coroutines.flow.StateFlow
 fun MainScreen(
     viewModel: MainViewModel,
     onNavigateToSettings: () -> Unit,
-    onNavigateToRegionSetup: () -> Unit,
+    onNavigateToVocabulary: () -> Unit,
     onStartCapture: () -> Unit,
     onStopCapture: () -> Unit,
     onPlayAudio: (String) -> Unit,
@@ -84,7 +84,7 @@ fun MainScreen(
                 hasApiKey = hasApiKey,
                 onStartCapture = onStartCapture,
                 onNavigateToSettings = onNavigateToSettings,
-                onNavigateToRegionSetup = onNavigateToRegionSetup,
+                onNavigateToVocabulary = onNavigateToVocabulary,
                 translations = viewModel.translations,
                 onPlayAudio = onPlayAudio,
                 onWordLookup = onWordLookup
@@ -184,7 +184,7 @@ private fun IdleLayout(
     hasApiKey: Boolean,
     onStartCapture: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToRegionSetup: () -> Unit,
+    onNavigateToVocabulary: () -> Unit,
     translations: StateFlow<List<TranslationEntry>>? = null,
     onPlayAudio: ((String) -> Unit)? = null,
     onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
@@ -255,14 +255,14 @@ private fun IdleLayout(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FilledTonalButton(onClick = onNavigateToRegionSetup) {
+            FilledTonalButton(onClick = onNavigateToVocabulary) {
                 Icon(
-                    imageVector = Icons.Default.CropFree,
+                    imageVector = Icons.Default.FormatListBulleted,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Set Region")
+                Text("Vocabulary")
             }
             IconButton(onClick = onNavigateToSettings) {
                 Icon(
