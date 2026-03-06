@@ -87,9 +87,29 @@ class TtsManager @Inject constructor(
      * @param text The text to speak
      * @param queueMode TextToSpeech.QUEUE_FLUSH (default, interrupts current speech)
      *   or TextToSpeech.QUEUE_ADD (queues after current speech)
+     * @return true if the speak request was submitted, false if TTS is not available
      */
-    fun speak(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
-        tts?.speak(text, queueMode, null, UUID.randomUUID().toString())
+    fun speak(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH): Boolean {
+        val engine = tts
+        if (engine == null) {
+            Log.w(TAG, "TTS speak called but engine is null (not initialized)")
+            return false
+        }
+        if (!isInitialized) {
+            Log.w(TAG, "TTS speak called but engine is not yet initialized")
+            return false
+        }
+        if (text.isBlank()) {
+            Log.d(TAG, "TTS speak called with blank text, ignoring")
+            return false
+        }
+        val result = engine.speak(text, queueMode, null, UUID.randomUUID().toString())
+        if (result != TextToSpeech.SUCCESS) {
+            Log.e(TAG, "TTS speak failed with result code: $result for text: ${text.take(50)}")
+            return false
+        }
+        Log.d(TAG, "TTS speaking: ${text.take(50)}...")
+        return true
     }
 
     /**

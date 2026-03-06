@@ -109,12 +109,15 @@ class SettingsViewModel @Inject constructor(
     private val _autoReadFlushMode = MutableStateFlow(true)
     val autoReadFlushMode: StateFlow<Boolean> = _autoReadFlushMode.asStateFlow()
 
+    /** Whether TTS has Japanese voices available */
+    private val _ttsJapaneseAvailable = MutableStateFlow(false)
+    val ttsJapaneseAvailable: StateFlow<Boolean> = _ttsJapaneseAvailable.asStateFlow()
+
     init {
         viewModelScope.launch {
             _deepLApiKey.value = settingsRepository.getDeepLApiKey() ?: ""
             _ttsVoiceName.value = settingsRepository.getTtsVoiceName()
             _ocrEngineName.value = settingsRepository.getOcrEngineName() ?: "ML Kit"
-            _availableVoices.value = ttsManager.getJapaneseVoices().map { it.name }
             _captureIntervalMs.value = settingsRepository.getCaptureIntervalMs()
             _translationEngine.value = settingsRepository.getTranslationEngine() ?: "deepl"
             _openAiApiKey.value = settingsRepository.getOpenAiApiKey() ?: ""
@@ -131,6 +134,29 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             profileDao.getAll().collect { _profiles.value = it }
         }
+        // Initialize TTS if not already done, then load voices.
+        // TTS initialization is async so we need to poll until ready.
+        viewModelScope.launch {
+            if (!ttsManager.isInitialized) {
+                ttsManager.initialize()
+            }
+            // Poll for TTS initialization (async callback, typically < 1 second)
+            var attempts = 0
+            while (!ttsManager.isInitialized && attempts < 20) {
+                delay(250)
+                attempts++
+            }
+            refreshTtsVoices()
+        }
+    }
+
+    /**
+     * Refresh the available TTS voices list from the TTS engine.
+     * Called after TTS initialization or when user wants to re-check.
+     */
+    fun refreshTtsVoices() {
+        _availableVoices.value = ttsManager.getJapaneseVoices().map { it.name }
+        _ttsJapaneseAvailable.value = ttsManager.isJapaneseAvailable
     }
 
     /** Save a new DeepL API key to encrypted storage. */

@@ -100,6 +100,7 @@ fun SettingsScreen(
     val profileOperationStatus by viewModel.profileOperationStatus.collectAsState()
     val autoReadEnabled by viewModel.autoReadEnabled.collectAsState()
     val autoReadFlushMode by viewModel.autoReadFlushMode.collectAsState()
+    val ttsJapaneseAvailable by viewModel.ttsJapaneseAvailable.collectAsState()
 
     var deepLKeyVisible by remember { mutableStateOf(false) }
     var openAiKeyVisible by remember { mutableStateOf(false) }
@@ -340,17 +341,37 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (availableVoices.isEmpty()) {
-                    Text(
-                        text = "No Japanese voices available. TTS engine may not be initialized.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
+                    if (!ttsJapaneseAvailable) {
+                        Text(
+                            text = "No Japanese TTS voice installed. Install Google TTS from the Play Store and enable the Japanese language pack in your device's TTS settings.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text(
+                            text = "TTS is initializing... Tap Refresh if voices don't appear.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.refreshTtsVoices() }
+                    ) {
+                        Text("Refresh Voices")
+                    }
                 } else {
                     VoiceDropdown(
                         selectedVoice = ttsVoiceName,
                         voices = availableVoices,
                         onVoiceSelected = { viewModel.saveTtsVoice(it) }
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.refreshTtsVoices() }
+                    ) {
+                        Text("Refresh Voices")
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))

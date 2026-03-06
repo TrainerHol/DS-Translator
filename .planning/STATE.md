@@ -118,6 +118,10 @@ Recent decisions affecting current work:
 - [Phase 05]: TTS from overlay uses ACTION_SPEAK intent to CaptureService for service isolation
 - [Phase 05]: Overlay mode activates independently of capture; shows empty until OCR results arrive
 
+### Roadmap Evolution
+
+- Phase 6 added: Session vocabulary screen, TTS engine setup, translation list UX cleanup, bubble menu state cleanup
+
 ### Pending Todos
 
 None yet.

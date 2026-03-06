@@ -112,3 +112,13 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 3. Learning Features | 1/4 | In progress | - |
 | 4. Profiles and Auto-Read | 0/3 | Not started | - |
 | 5. Overlay Mode | 0/3 | Not started | - |
+
+### Phase 6: Session vocabulary screen, TTS engine setup, translation list UX cleanup, bubble menu state cleanup
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 5
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 6 to break down)

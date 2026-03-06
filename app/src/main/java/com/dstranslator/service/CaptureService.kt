@@ -83,7 +83,6 @@ class CaptureService : Service() {
     private var continuousCaptureJob: Job? = null
     private var previousOcrText: String = ""
     private var currentSessionId: String = UUID.randomUUID().toString()
-    private var historyCollectionJob: Job? = null
 
     /** Per-region text tracking for auto-read (replaces global previousOcrText for auto-read decisions) */
     private val previousRegionTexts = mutableMapOf<String, String>()
@@ -172,21 +171,12 @@ class CaptureService : Service() {
         currentSessionId = UUID.randomUUID().toString()
         _currentSessionId.value = currentSessionId
 
-        // Load existing history for this session (if service was recreated)
-        historyCollectionJob?.cancel()
-        historyCollectionJob = serviceScope.launch {
-            translationHistoryDao.getBySession(currentSessionId).collect { historyEntries ->
-                val entries = historyEntries.map { entity ->
-                    TranslationEntry(
-                        japanese = entity.sourceText,
-                        english = entity.translatedText,
-                        timestamp = entity.timestamp,
-                        sessionId = entity.sessionId
-                    )
-                }
-                _translations.value = entries
-            }
-        }
+        // Clear translations from previous session and start fresh.
+        // Translation entries are added directly by captureAndTranslate() with full
+        // segmentation and furigana data. We don't use Room Flow collection because
+        // TranslationHistoryEntity doesn't store segmentation/furigana data, and
+        // collecting from Room would overwrite rich entries with stripped-down ones.
+        _translations.value = emptyList()
 
         // Start floating button service
         val buttonIntent = Intent(this, FloatingButtonService::class.java)
@@ -204,7 +194,6 @@ class CaptureService : Service() {
     private fun handleStop() {
         // Stop continuous capture if running
         stopContinuousCapture()
-        historyCollectionJob?.cancel()
 
         // Stop floating button service
         stopService(Intent(this, FloatingButtonService::class.java))
@@ -420,53 +409,67 @@ class CaptureService : Service() {
             }
             previousOcrText = currentText
 
-            // Translate each text block, segment, and persist to Room history
-            val newEntries = allTextBlocks.mapNotNull { block ->
-                if (block.text.isBlank()) return@mapNotNull null
-                val translation = translationManager.translate(block.text)
+            // Merge all text blocks into a single combined text for the region.
+            // ML Kit often fragments dialogue into multiple blocks (e.g., character name
+            // in one block, dialogue text in another). Translating fragments individually
+            // produces nonsensical results. Merging preserves context for accurate translation.
+            val combinedText = allTextBlocks
+                .map { it.text.trim() }
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
 
-                // Segment Japanese text and resolve furigana (graceful degradation)
-                val segmentedWords = if (sudachiSegmenter.isInitialized) {
-                    try {
-                        sudachiSegmenter.segment(block.text)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Segmentation failed for text block", e)
-                        emptyList()
-                    }
-                } else emptyList()
-
-                val furiganaSegments = if (segmentedWords.isNotEmpty()) {
-                    try {
-                        furiganaResolver.resolve(segmentedWords)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Furigana resolution failed", e)
-                        emptyList()
-                    }
-                } else emptyList()
-
-                val entry = TranslationEntry(
-                    japanese = block.text,
-                    english = translation,
-                    sessionId = currentSessionId,
-                    segmentedWords = segmentedWords,
-                    furiganaSegments = furiganaSegments
-                )
-
-                // Persist to history (per-session, persisted to Room)
-                translationHistoryDao.insert(
-                    TranslationHistoryEntity(
-                        sessionId = currentSessionId,
-                        sourceText = block.text,
-                        translatedText = translation,
-                        timestamp = System.currentTimeMillis()
-                    )
-                )
-
-                entry
+            if (combinedText.isBlank()) {
+                _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
+                preprocessedBitmaps.forEach { pp -> if (pp !== bitmap) pp.recycle() }
+                bitmap.recycle()
+                return
             }
 
-            // Room Flow collection (historyCollectionJob) automatically updates _translations
-            // No manual list update needed
+            val translation = translationManager.translate(combinedText)
+
+            // Segment combined Japanese text and resolve furigana (graceful degradation)
+            val segmentedWords = if (sudachiSegmenter.isInitialized) {
+                try {
+                    sudachiSegmenter.segment(combinedText)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Segmentation failed for combined text", e)
+                    emptyList()
+                }
+            } else emptyList()
+
+            val furiganaSegments = if (segmentedWords.isNotEmpty()) {
+                try {
+                    furiganaResolver.resolve(segmentedWords)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Furigana resolution failed", e)
+                    emptyList()
+                }
+            } else emptyList()
+
+            val entry = TranslationEntry(
+                japanese = combinedText,
+                english = translation,
+                sessionId = currentSessionId,
+                segmentedWords = segmentedWords,
+                furiganaSegments = furiganaSegments
+            )
+
+            // Persist to history (per-session, persisted to Room)
+            translationHistoryDao.insert(
+                TranslationHistoryEntity(
+                    sessionId = currentSessionId,
+                    sourceText = combinedText,
+                    translatedText = translation,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+
+            // Directly update translations list with the entry that includes
+            // furigana and segmentation data. Room Flow collection does NOT
+            // store segmentation data, so we must update manually.
+            val currentEntries = _translations.value.toMutableList()
+            currentEntries.add(entry)
+            _translations.value = currentEntries
 
             // Auto-read hook: check each region for text changes and speak via TTS
             val autoReadEnabled = settingsRepository.getAutoReadEnabled()
