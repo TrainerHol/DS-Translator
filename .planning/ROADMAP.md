@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Learning Features** - WaniKani furigana, word segmentation, tap-to-lookup dictionary, JLPT indicators, and additional translation engines
 - [ ] **Phase 4: Profiles and Auto-Read** - Per-game profiles and dialog region auto-read via TTS
 - [ ] **Phase 5: Overlay Mode** - Floating bubble overlay with translation panel for dual-screen games (DS/3DS)
+- [ ] **Phase 6: Session Vocabulary, TTS Engine, UX Polish** - Session vocabulary screen, bundled TTS, OCR improvements, bubble menu cleanup, region UX simplification
 
 ## Phase Details
 
@@ -100,10 +101,28 @@ Plans:
 - [ ] 05-02-PLAN.md -- Overlay display system: OverlayPanelView (drag/resize/pin/lock), OverlaySourceLabels (coordinate-mapped), OverlayTooltip, OverlayDisplayManager (Wave 2)
 - [ ] 05-03-PLAN.md -- Integration: bubble menu grid layout (8 buttons), FloatingButtonService overlay mode toggle and screen switch, Presentation dismiss/restore, end-to-end verification (Wave 3)
 
+### Phase 6: Session Vocabulary, TTS Engine, UX Polish
+**Goal**: Polish and UX improvements: session vocabulary screen in main app, bundled on-device Japanese TTS engine (Kokoro via sherpa-onnx), OCR preprocessing improvements with Sudachi init fix, bubble menu icon unification, and region selection simplification
+**Depends on:** Phase 5
+**Requirements**: P6-VOCAB, P6-TTS, P6-OCR, P6-SUDACHI, P6-ICONS, P6-REGION
+**Success Criteria** (what must be TRUE):
+  1. User can view a session vocabulary screen showing all unique words encountered during gameplay, with surface form, reading, definition, JLPT badge, and audio playback
+  2. App ships a bundled Japanese TTS engine that works out of box without installing system TTS voices, with random male/female voice selection per playback
+  3. OCR preprocessing uses 4x bicubic upscale with enhanced contrast for improved accuracy on retro game fonts
+  4. Sudachi segmenter reliably initializes and retries if not ready, so furigana actually displays on device
+  5. All bubble menu buttons use consistent Material Design vector icons
+  6. Region editing is only via bubble menu overlay; capture permission auto-requested at launch and persists after OCR stop
+**Plans**: 3 plans across 2 waves
+
+Plans:
+- [ ] 06-01-PLAN.md -- OCR preprocessing 4x bicubic + contrast boost, Sudachi init retry, bubble menu Material Design icons (Wave 1)
+- [ ] 06-02-PLAN.md -- Bundled TTS engine (sherpa-onnx + Kokoro), TtsManager dual-engine dispatch, settings UI (Wave 1)
+- [ ] 06-03-PLAN.md -- Session vocabulary screen, NavGraph cleanup (remove RegionSetupScreen), capture permission lifecycle separation (Wave 2)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -112,13 +131,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 3. Learning Features | 1/4 | In progress | - |
 | 4. Profiles and Auto-Read | 0/3 | Not started | - |
 | 5. Overlay Mode | 0/3 | Not started | - |
-
-### Phase 6: Session vocabulary screen, TTS engine setup, translation list UX cleanup, bubble menu state cleanup
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 5
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 6 to break down)
+| 6. Session Vocabulary, TTS Engine, UX Polish | 0/3 | Not started | - |

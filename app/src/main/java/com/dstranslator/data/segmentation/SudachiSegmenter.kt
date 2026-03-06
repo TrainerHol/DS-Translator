@@ -7,6 +7,7 @@ import com.worksap.nlp.sudachi.Dictionary
 import com.worksap.nlp.sudachi.DictionaryFactory
 import com.worksap.nlp.sudachi.Tokenizer
 import dagger.hilt.android.qualifiers.ApplicationContext
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -20,6 +21,9 @@ import javax.inject.Singleton
  * because it uses memory-mapped files (MappedByteBuffer) for efficient access.
  * On first launch, the dictionary is copied from assets to internal storage.
  *
+ * The dictionary file (system_core.dic) is bundled in the APK under
+ * assets/sudachi/. It ships with the app so no external download is needed.
+ *
  * Usage:
  * 1. Call initialize() once at app startup (async, copies dictionary if needed)
  * 2. Call segment() to split Japanese text into individual words
@@ -31,6 +35,13 @@ class SudachiSegmenter @Inject constructor(
 ) {
     private var dictionary: Dictionary? = null
     private var tokenizer: Tokenizer? = null
+    private var initializationInProgress = false
+    private var initFailCount = 0
+
+    companion object {
+        private const val TAG = "SudachiSegmenter"
+        private const val MAX_INIT_RETRIES = 3
+    }
 
     /**
      * Initialize the Sudachi dictionary by copying it from assets to internal
@@ -67,6 +78,30 @@ class SudachiSegmenter @Inject constructor(
      * Whether the segmenter has been successfully initialized and is ready for use.
      */
     val isInitialized: Boolean get() = tokenizer != null
+
+    /**
+     * Ensure the segmenter is initialized, retrying if needed (up to [MAX_INIT_RETRIES] attempts).
+     * This allows lazy initialization on first use if the startup init was too early or failed.
+     *
+     * @return true if the segmenter is ready for use, false otherwise
+     */
+    suspend fun ensureInitialized(): Boolean {
+        if (isInitialized) return true
+        if (initFailCount >= MAX_INIT_RETRIES) return false
+        if (initializationInProgress) return false
+
+        return try {
+            initializationInProgress = true
+            initialize()
+            isInitialized
+        } catch (e: Exception) {
+            initFailCount++
+            Log.w(TAG, "Sudachi initialization attempt failed (${initFailCount}/$MAX_INIT_RETRIES)", e)
+            false
+        } finally {
+            initializationInProgress = false
+        }
+    }
 
     /**
      * Segment Japanese text into individual words/morphemes.

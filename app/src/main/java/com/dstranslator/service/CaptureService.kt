@@ -428,14 +428,16 @@ class CaptureService : Service() {
             val translation = translationManager.translate(combinedText)
 
             // Segment combined Japanese text and resolve furigana (graceful degradation)
-            val segmentedWords = if (sudachiSegmenter.isInitialized) {
-                try {
+            val segmentedWords = try {
+                if (sudachiSegmenter.ensureInitialized()) {
                     sudachiSegmenter.segment(combinedText)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Segmentation failed for combined text", e)
+                } else {
                     emptyList()
                 }
-            } else emptyList()
+            } catch (e: Exception) {
+                Log.w(TAG, "Segmentation failed", e)
+                emptyList()
+            }
 
             val furiganaSegments = if (segmentedWords.isNotEmpty()) {
                 try {

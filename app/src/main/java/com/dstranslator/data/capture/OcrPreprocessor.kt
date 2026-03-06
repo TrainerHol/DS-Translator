@@ -13,6 +13,8 @@ import kotlin.math.roundToInt
 /**
  * Stateless bitmap preprocessing pipeline for OCR.
  * Applies crop, upscale, and grayscale transformations to improve OCR accuracy.
+ * Uses 4x bicubic-quality upscaling and 2.0x contrast enhancement for pixel-font
+ * game text common in DS/retro titles.
  */
 @Singleton
 class OcrPreprocessor @Inject constructor() {
@@ -22,10 +24,9 @@ class OcrPreprocessor @Inject constructor() {
      *
      * Pipeline:
      * 1. Crop to the specified region (if provided), clamping to bitmap bounds
-     * 2. Upscale small images to target height for ML Kit character detection.
-     *    Uses nearest-neighbor interpolation (filter=false) to preserve hard edges
-     *    in pixel fonts common in games like DS/retro titles.
-     * 3. Enhance contrast to sharpen text against backgrounds
+     * 2. Upscale small images by fixed 4x factor with bicubic-quality interpolation
+     *    (filter=true) for improved OCR accuracy on pixel-font game text.
+     * 3. Enhance contrast (2.0x) to sharpen text against backgrounds
      * 4. Convert to grayscale for better OCR contrast
      *
      * @param bitmap The raw captured bitmap
@@ -40,14 +41,13 @@ class OcrPreprocessor @Inject constructor() {
             result = cropToRegion(result, region)
         }
 
-        // Step 2: Upscale if too small (ML Kit needs characters >= 16px, target ~200px height)
-        // Uses nearest-neighbor scaling (filter=false) to preserve sharp pixel font edges.
-        // Bilinear filtering blurs pixel fonts, making OCR significantly worse.
+        // Step 2: Upscale by fixed 4x if too small for ML Kit character detection.
+        // Uses bicubic-quality interpolation (filter=true) for smoother upscaling.
         if (result.height < TARGET_HEIGHT_FOR_OCR) {
-            val scaleFactor = (TARGET_HEIGHT_FOR_OCR.toFloat() / result.height).coerceAtLeast(2f)
+            val scaleFactor = 4f
             val scaledWidth = (result.width * scaleFactor).roundToInt()
             val scaledHeight = (result.height * scaleFactor).roundToInt()
-            val scaled = Bitmap.createScaledBitmap(result, scaledWidth, scaledHeight, false)
+            val scaled = Bitmap.createScaledBitmap(result, scaledWidth, scaledHeight, true)
             if (scaled !== result && result !== bitmap) {
                 result.recycle()
             }
@@ -86,8 +86,8 @@ class OcrPreprocessor @Inject constructor() {
 
     /**
      * Enhance contrast using a ColorMatrix to sharpen text against backgrounds.
-     * Increases contrast by 1.5x with slight brightness boost, improving OCR accuracy
-     * for low-contrast pixel font text common in game screenshots.
+     * Increases contrast by 2.0x, improving OCR accuracy for low-contrast pixel
+     * font text common in game screenshots.
      */
     private fun enhanceContrast(bitmap: Bitmap): Bitmap {
         val enhanced = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
@@ -127,12 +127,12 @@ class OcrPreprocessor @Inject constructor() {
         private const val TARGET_HEIGHT_FOR_OCR = 200
 
         /** Contrast enhancement scale factor (1.0 = no change, >1.0 = more contrast) */
-        private const val CONTRAST_SCALE = 1.5f
+        private const val CONTRAST_SCALE = 2.0f
 
         /**
          * Contrast translation to keep midtones centered after scaling.
-         * Formula: 128 * (1 - scale) = 128 * (1 - 1.5) = -64
+         * Formula: 128 * (1 - scale) = 128 * (1 - 2.0) = -128
          */
-        private const val CONTRAST_TRANSLATE = -64f
+        private const val CONTRAST_TRANSLATE = -128f
     }
 }
