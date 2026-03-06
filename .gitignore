@@ -34,5 +34,6 @@ google-services.json
 .planning/
 /.claude
 
-# Sudachi dictionary (large binary, not committed)
-app/src/main/assets/sudachi/system_core.dic
+# Large model/binary files (managed outside git)
+app/src/main/assets/sherpa-onnx-kokoro/
+app/libs/*.aar

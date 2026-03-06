@@ -144,6 +144,29 @@ class SettingsRepository @Inject constructor(
 
     // --- DataStore for other settings ---
 
+    // --- TTS engine type (DataStore) ---
+
+    /**
+     * Get the TTS engine type preference: "bundled" (Kokoro via sherpa-onnx) or "system".
+     * Defaults to "bundled" for zero-setup Japanese TTS.
+     */
+    suspend fun getTtsEngineType(): String {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_TTS_ENGINE_TYPE] ?: DEFAULT_TTS_ENGINE_TYPE }
+            .first()
+    }
+
+    suspend fun setTtsEngineType(type: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_TTS_ENGINE_TYPE] = type
+        }
+    }
+
+    fun ttsEngineTypeFlow(): Flow<String> {
+        return context.dataStore.data
+            .map { prefs -> prefs[PREF_TTS_ENGINE_TYPE] ?: DEFAULT_TTS_ENGINE_TYPE }
+    }
+
     suspend fun getTtsVoiceName(): String? {
         return context.dataStore.data
             .map { prefs -> prefs[PREF_TTS_VOICE] }
@@ -434,6 +457,7 @@ class SettingsRepository @Inject constructor(
         return JSONObject().apply {
             put("translationEngine", prefs[PREF_TRANSLATION_ENGINE] ?: "")
             put("ocrEngine", prefs[PREF_OCR_ENGINE] ?: "")
+            put("ttsEngineType", prefs[PREF_TTS_ENGINE_TYPE] ?: DEFAULT_TTS_ENGINE_TYPE)
             put("ttsVoice", prefs[PREF_TTS_VOICE] ?: "")
             put("captureIntervalMs", prefs[PREF_CAPTURE_INTERVAL] ?: DEFAULT_CAPTURE_INTERVAL_MS)
             put("furiganaMode", prefs[PREF_FURIGANA_MODE] ?: DEFAULT_FURIGANA_MODE)
@@ -457,6 +481,7 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[PREF_TRANSLATION_ENGINE] = settings.optString("translationEngine", "")
             prefs[PREF_OCR_ENGINE] = settings.optString("ocrEngine", "")
+            prefs[PREF_TTS_ENGINE_TYPE] = settings.optString("ttsEngineType", DEFAULT_TTS_ENGINE_TYPE)
             prefs[PREF_TTS_VOICE] = settings.optString("ttsVoice", "")
             prefs[PREF_CAPTURE_INTERVAL] = settings.optLong("captureIntervalMs", DEFAULT_CAPTURE_INTERVAL_MS)
             prefs[PREF_FURIGANA_MODE] = settings.optString("furiganaMode", DEFAULT_FURIGANA_MODE)
@@ -563,6 +588,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_CLAUDE_API = "claude_api_key"
         private const val KEY_WANIKANI_API = "wanikani_api_key"
 
+        private val PREF_TTS_ENGINE_TYPE = stringPreferencesKey("tts_engine_type")
         private val PREF_TTS_VOICE = stringPreferencesKey("tts_voice_name")
         private val PREF_OCR_ENGINE = stringPreferencesKey("ocr_engine_name")
         private val PREF_REGION_X = intPreferencesKey("capture_region_x")
@@ -587,6 +613,7 @@ class SettingsRepository @Inject constructor(
         private val PREF_OVERLAY_CONFIG_SECONDARY = stringPreferencesKey("overlay_config_secondary")
         private val PREF_OVERLAY_DISMISS_PRESENTATION = booleanPreferencesKey("overlay_dismiss_presentation")
 
+        const val DEFAULT_TTS_ENGINE_TYPE = "bundled"
         const val DEFAULT_FURIGANA_MODE = "all"
         const val DEFAULT_CAPTURE_INTERVAL_MS = 2000L
         const val MIN_CAPTURE_INTERVAL_MS = 500L

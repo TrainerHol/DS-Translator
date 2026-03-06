@@ -77,6 +77,11 @@ android {
             excludes += "META-INF/DEPENDENCIES"
         }
     }
+
+    // Prevent compression of model and data files (already compressed / need direct access)
+    androidResources {
+        noCompress += listOf("onnx", "bin", "txt", "fst")
+    }
 }
 
 dependencies {
@@ -133,6 +138,9 @@ dependencies {
 
     // Sudachi (Japanese morphological analysis)
     implementation(libs.sudachi)
+
+    // Sherpa-onnx (on-device TTS engine)
+    implementation(files("libs/sherpa-onnx-1.12.28.aar"))
 
     // Testing
     testImplementation(libs.junit)
