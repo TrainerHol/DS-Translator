@@ -113,6 +113,10 @@ class SettingsViewModel @Inject constructor(
     private val _ttsJapaneseAvailable = MutableStateFlow(false)
     val ttsJapaneseAvailable: StateFlow<Boolean> = _ttsJapaneseAvailable.asStateFlow()
 
+    /** Current TTS engine type: "bundled" or "system" */
+    private val _ttsEngineType = MutableStateFlow(SettingsRepository.DEFAULT_TTS_ENGINE_TYPE)
+    val ttsEngineType: StateFlow<String> = _ttsEngineType.asStateFlow()
+
     init {
         viewModelScope.launch {
             _deepLApiKey.value = settingsRepository.getDeepLApiKey() ?: ""
@@ -129,6 +133,7 @@ class SettingsViewModel @Inject constructor(
             _activeProfileId.value = settingsRepository.getActiveProfileId()
             _autoReadEnabled.value = settingsRepository.getAutoReadEnabled()
             _autoReadFlushMode.value = settingsRepository.getAutoReadFlushMode()
+            _ttsEngineType.value = settingsRepository.getTtsEngineType()
         }
         // Collect profiles as Flow (auto-updates on changes)
         viewModelScope.launch {
@@ -164,6 +169,16 @@ class SettingsViewModel @Inject constructor(
         _deepLApiKey.value = key
         viewModelScope.launch {
             settingsRepository.setDeepLApiKey(key)
+        }
+    }
+
+    /** Save TTS engine type selection and switch the TTS manager. */
+    fun saveTtsEngineType(type: String) {
+        _ttsEngineType.value = type
+        viewModelScope.launch {
+            settingsRepository.setTtsEngineType(type)
+            ttsManager.setEngineType(TtsManager.EngineType.fromString(type))
+            refreshTtsVoices()
         }
     }
 
@@ -393,6 +408,7 @@ class SettingsViewModel @Inject constructor(
             _autoReadEnabled.value = settingsRepository.getAutoReadEnabled()
             _autoReadFlushMode.value = settingsRepository.getAutoReadFlushMode()
             _activeProfileId.value = settingsRepository.getActiveProfileId()
+            _ttsEngineType.value = settingsRepository.getTtsEngineType()
         }
     }
 

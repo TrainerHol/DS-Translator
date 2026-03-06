@@ -101,6 +101,7 @@ fun SettingsScreen(
     val autoReadEnabled by viewModel.autoReadEnabled.collectAsState()
     val autoReadFlushMode by viewModel.autoReadFlushMode.collectAsState()
     val ttsJapaneseAvailable by viewModel.ttsJapaneseAvailable.collectAsState()
+    val ttsEngineType by viewModel.ttsEngineType.collectAsState()
 
     var deepLKeyVisible by remember { mutableStateOf(false) }
     var openAiKeyVisible by remember { mutableStateOf(false) }
@@ -332,7 +333,7 @@ fun SettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // ===== TTS Voice Section =====
+                // ===== TTS Engine Section =====
                 Text(
                     text = "Text-to-Speech",
                     style = MaterialTheme.typography.titleMedium,
@@ -340,38 +341,55 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (availableVoices.isEmpty()) {
-                    if (!ttsJapaneseAvailable) {
-                        Text(
-                            text = "No Japanese TTS voice installed. Install Google TTS from the Play Store and enable the Japanese language pack in your device's TTS settings.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                // TTS Engine Type Selector
+                TtsEngineSelector(
+                    selectedEngine = ttsEngineType,
+                    onEngineSelected = { viewModel.saveTtsEngineType(it) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Show voice selection only when System TTS is active
+                if (ttsEngineType == "system") {
+                    if (availableVoices.isEmpty()) {
+                        if (!ttsJapaneseAvailable) {
+                            Text(
+                                text = "No Japanese TTS voice installed. Install Google TTS from the Play Store and enable the Japanese language pack in your device's TTS settings.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            Text(
+                                text = "TTS is initializing... Tap Refresh if voices don't appear.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { viewModel.refreshTtsVoices() }
+                        ) {
+                            Text("Refresh Voices")
+                        }
                     } else {
-                        Text(
-                            text = "TTS is initializing... Tap Refresh if voices don't appear.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        VoiceDropdown(
+                            selectedVoice = ttsVoiceName,
+                            voices = availableVoices,
+                            onVoiceSelected = { viewModel.saveTtsVoice(it) }
                         )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { viewModel.refreshTtsVoices() }
-                    ) {
-                        Text("Refresh Voices")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { viewModel.refreshTtsVoices() }
+                        ) {
+                            Text("Refresh Voices")
+                        }
                     }
                 } else {
-                    VoiceDropdown(
-                        selectedVoice = ttsVoiceName,
-                        voices = availableVoices,
-                        onVoiceSelected = { viewModel.saveTtsVoice(it) }
+                    // Bundled engine info
+                    Text(
+                        text = "Using bundled Kokoro TTS with random Japanese voice selection (male and female). No setup required.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { viewModel.refreshTtsVoices() }
-                    ) {
-                        Text("Refresh Voices")
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -1054,6 +1072,57 @@ private fun FuriganaModeSelector(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * TTS engine type selector: Bundled (Kokoro) or System TTS.
+ */
+@Composable
+private fun TtsEngineSelector(
+    selectedEngine: String,
+    onEngineSelected: (String) -> Unit
+) {
+    val engines = listOf("bundled" to "Bundled (Kokoro)", "system" to "System TTS")
+
+    Column(modifier = Modifier.selectableGroup()) {
+        engines.forEach { (value, label) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = selectedEngine == value,
+                        onClick = { onEngineSelected(value) }
+                    )
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = selectedEngine == value,
+                    onClick = { onEngineSelected(value) }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (value == "bundled") {
+                        Text(
+                            text = "Zero-setup, random male/female voice per playback",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        )
+                    } else {
+                        Text(
+                            text = "Uses device TTS engine (requires voice pack install)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        )
+                    }
                 }
             }
         }
