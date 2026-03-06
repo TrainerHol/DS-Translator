@@ -171,6 +171,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // Full teardown: release MediaProjection and stop service when app closes
+        val releaseIntent = Intent(this, CaptureService::class.java).apply {
+            action = CaptureService.ACTION_RELEASE_CAPTURE
+        }
+        try {
+            startService(releaseIntent)
+        } catch (_: Exception) {
+            // Service may not be running
+        }
+    }
+
     companion object {
         const val ACTION_OPEN_PROFILES = "com.dstranslator.action.OPEN_PROFILES"
         const val ACTION_START_CAPTURE_THEN_EDIT_REGIONS = "com.dstranslator.action.START_CAPTURE_THEN_EDIT_REGIONS"

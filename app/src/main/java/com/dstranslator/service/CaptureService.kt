@@ -101,6 +101,7 @@ class CaptureService : Service() {
             ACTION_START -> handleStart(intent)
             ACTION_CAPTURE -> handleCapture()
             ACTION_STOP -> handleStop()
+            ACTION_RELEASE_CAPTURE -> handleReleaseCaptureAndStop()
             ACTION_START_CONTINUOUS -> startContinuousCapture()
             ACTION_STOP_CONTINUOUS -> stopContinuousCapture()
             ACTION_DISMISS_PRESENTATION -> handleDismissPresentation()
@@ -191,7 +192,26 @@ class CaptureService : Service() {
         }
     }
 
+    /**
+     * Stop OCR loop only. MediaProjection, VirtualDisplay, and the service continue
+     * running so region editing and manual captures remain instant (no re-permission).
+     * Translations are preserved for vocabulary review.
+     */
     private fun handleStop() {
+        // Stop continuous capture if running
+        stopContinuousCapture()
+
+        // Keep translations visible after stop so user can review vocabulary.
+        // Only the pipeline state transitions to Idle; translations are preserved
+        // until a new session starts (handleStart generates a new session ID).
+        _pipelineState.value = PipelineState.Idle
+    }
+
+    /**
+     * Full teardown: stop OCR loop, release MediaProjection, dismiss presentation,
+     * and stop the service. Called when the app is truly closing.
+     */
+    private fun handleReleaseCaptureAndStop() {
         // Stop continuous capture if running
         stopContinuousCapture()
 
@@ -215,9 +235,6 @@ class CaptureService : Service() {
         jmdictRepositoryRef = null
         _latestOcrResult.value = null
 
-        // Keep translations visible after stop so user can review vocabulary.
-        // Only the pipeline state transitions to Idle; translations are preserved
-        // until a new session starts (handleStart generates a new session ID).
         _pipelineState.value = PipelineState.Idle
 
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -604,6 +621,7 @@ class CaptureService : Service() {
         const val ACTION_START = "com.dstranslator.action.START"
         const val ACTION_CAPTURE = "com.dstranslator.action.CAPTURE"
         const val ACTION_STOP = "com.dstranslator.action.STOP"
+        const val ACTION_RELEASE_CAPTURE = "com.dstranslator.action.RELEASE_CAPTURE"
         const val ACTION_START_CONTINUOUS = "com.dstranslator.action.START_CONTINUOUS"
         const val ACTION_STOP_CONTINUOUS = "com.dstranslator.action.STOP_CONTINUOUS"
         const val ACTION_OPEN_REGION_EDIT = "com.dstranslator.action.OPEN_REGION_EDIT"
