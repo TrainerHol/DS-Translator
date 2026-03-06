@@ -1,7 +1,6 @@
 package com.dstranslator.ui.presentation
 
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -11,11 +10,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Constraints
 import com.dstranslator.domain.model.FuriganaSegment
 
 /**
@@ -46,8 +43,13 @@ private data class PositionedSegment(
  * Custom composable that renders Japanese text with furigana (reading annotations)
  * positioned above kanji characters.
  *
- * Uses Canvas-based text rendering with TextMeasurer for precise positioning.
- * Handles text wrapping for long sentences and word tap detection.
+ * Uses a single Layout composable with drawBehind for Canvas-based text rendering.
+ * The Layout measures and positions segments with line wrapping, then drawBehind
+ * renders both base text and furigana annotations using TextMeasurer.
+ *
+ * This unified approach ensures the composable has the correct measured height
+ * (furigana + gap + base text per line), making furigana visible and enabling
+ * proper scrolling in parent containers like LazyColumn.
  *
  * @param segments List of FuriganaSegments to render
  * @param modifier Modifier for the composable
@@ -109,20 +111,12 @@ fun FuriganaText(
     val lineHeight = furiganaLineHeight + furiganaGap + baseLineHeight
     val lineSpacing = 4 // px between wrapped lines
 
-    Layout(
-        content = {},
-        modifier = modifier
-            .pointerInput(segments, onWordTap) {
-                if (onWordTap != null) {
-                    detectTapGestures { offset ->
-                        // Will be resolved after layout
-                    }
-                }
-            }
-    ) { _, constraints ->
-        // Perform line wrapping layout
-        val maxWidth = constraints.maxWidth
-        val positioned = mutableListOf<PositionedSegment>()
+    /**
+     * Compute positioned segments for a given max width.
+     * Used by both layout measurement and drawing/tap detection.
+     */
+    fun layoutSegments(maxWidth: Int): List<PositionedSegment> {
+        val positions = mutableListOf<PositionedSegment>()
         var currentX = 0f
         var currentY = 0f
 
@@ -135,7 +129,7 @@ fun FuriganaText(
                 currentY += lineHeight + lineSpacing
             }
 
-            positioned.add(
+            positions.add(
                 PositionedSegment(
                     measured = m,
                     x = currentX,
@@ -147,47 +141,15 @@ fun FuriganaText(
             currentX += segWidth
         }
 
-        // Calculate total height
-        val totalHeight = if (positioned.isEmpty()) 0
-        else (currentY + lineHeight).toInt()
-
-        layout(
-            width = constraints.maxWidth,
-            height = totalHeight.coerceAtLeast(0)
-        ) {
-            // No child placeables -- drawing happens in drawBehind
-        }
+        return positions
     }
 
-    // Draw text using Canvas
-    Box(
+    Layout(
+        content = {},
         modifier = modifier
             .drawBehind {
-                val maxWidth = size.width
-                var currentX = 0f
-                var currentY = 0f
-                val positions = mutableListOf<PositionedSegment>()
-
-                // Re-layout for drawing (matches Layout pass)
-                for (m in measured) {
-                    val segWidth = maxOf(m.baseWidth, m.furiganaWidth).toFloat()
-
-                    if (currentX + segWidth > maxWidth && currentX > 0) {
-                        currentX = 0f
-                        currentY += lineHeight + lineSpacing
-                    }
-
-                    positions.add(
-                        PositionedSegment(
-                            measured = m,
-                            x = currentX,
-                            y = currentY,
-                            totalWidth = segWidth.toInt()
-                        )
-                    )
-
-                    currentX += segWidth
-                }
+                val maxWidth = size.width.toInt()
+                val positions = layoutSegments(maxWidth)
 
                 // Draw each segment
                 for (pos in positions) {
@@ -221,35 +183,41 @@ fun FuriganaText(
             .pointerInput(segments, onWordTap) {
                 if (onWordTap != null) {
                     detectTapGestures { offset ->
-                        // Determine which word was tapped based on position
-                        val maxWidth = size.width.toFloat()
-                        var currentX = 0f
-                        var currentY = 0f
+                        val maxWidth = size.width
+                        val positions = layoutSegments(maxWidth)
 
-                        for (m in measured) {
-                            val segWidth = maxOf(m.baseWidth, m.furiganaWidth).toFloat()
-
-                            if (currentX + segWidth > maxWidth && currentX > 0) {
-                                currentX = 0f
-                                currentY += lineHeight + lineSpacing
+                        for (pos in positions) {
+                            val segTop = pos.y
+                            val segBottom = pos.y + lineHeight
+                            val segLeft = pos.x
+                            val segRight = pos.x + pos.measured.let {
+                                maxOf(it.baseWidth, it.furiganaWidth).toFloat()
                             }
-
-                            val segTop = currentY
-                            val segBottom = currentY + lineHeight
-                            val segLeft = currentX
-                            val segRight = currentX + segWidth
 
                             if (offset.x in segLeft..segRight &&
                                 offset.y in segTop..segBottom
                             ) {
-                                onWordTap(m.index)
+                                onWordTap(pos.measured.index)
                                 return@detectTapGestures
                             }
-
-                            currentX += segWidth
                         }
                     }
                 }
             }
-    )
+    ) { _, constraints ->
+        // Perform line wrapping layout to compute total height
+        val maxWidth = constraints.maxWidth
+        val positions = layoutSegments(maxWidth)
+
+        // Calculate total height
+        val totalHeight = if (positions.isEmpty()) 0
+        else (positions.last().y + lineHeight).toInt()
+
+        layout(
+            width = constraints.maxWidth,
+            height = totalHeight.coerceAtLeast(0)
+        ) {
+            // No child placeables -- all rendering happens in drawBehind
+        }
+    }
 }

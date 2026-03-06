@@ -218,11 +218,21 @@ class FloatingButtonService : Service() {
             collapseMenu()
         }
 
-        // Observe continuous mode state to change bubble appearance
+        // Observe continuous mode state to change bubble appearance and button states.
+        // When continuous capture is active: show stop button highlighted, dim start button.
+        // When inactive: show start button normal, dim stop button.
         observerScope.launch {
             CaptureService.isContinuousActive.collect { isActive ->
                 val bgRes = if (isActive) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
                 btnBubble.setBackgroundResource(bgRes)
+
+                // Start button: dim when already running, normal when stopped
+                btnContinuousStart.alpha = if (isActive) BUTTON_DIMMED_ALPHA else BUTTON_ACTIVE_ALPHA
+                btnContinuousStart.isEnabled = !isActive
+
+                // Stop button: normal when running, dim when stopped
+                btnContinuousStop.alpha = if (isActive) BUTTON_ACTIVE_ALPHA else BUTTON_DIMMED_ALPHA
+                btnContinuousStop.isEnabled = isActive
             }
         }
 
@@ -245,12 +255,16 @@ class FloatingButtonService : Service() {
         }
 
         // Observe pipeline state for pending region edit after permission grant
+        // and update button enabled states based on capture service state
         observerScope.launch {
             CaptureService.pipelineState.collect { state ->
                 if (pendingRegionEdit && CaptureService.screenCaptureManagerRef != null) {
                     pendingRegionEdit = false
                     openRegionEditOverlay()
                 }
+
+                // Screen switch only makes sense when overlay is active
+                btnScreenSwitch.alpha = if (currentOverlayMode != OverlayMode.Off) BUTTON_ACTIVE_ALPHA else BUTTON_DIMMED_ALPHA
             }
         }
 
@@ -640,6 +654,12 @@ class FloatingButtonService : Service() {
 
         /** Stagger delay between each button animation in milliseconds */
         private const val STAGGER_DELAY_MS = 30
+
+        /** Alpha value for active/enabled buttons (fully visible) */
+        private const val BUTTON_ACTIVE_ALPHA = 1.0f
+
+        /** Alpha value for dimmed/disabled buttons (visually indicates unavailable) */
+        private const val BUTTON_DIMMED_ALPHA = 0.35f
 
         /** Intent action to open profiles section in MainActivity */
         const val ACTION_OPEN_PROFILES = "com.dstranslator.action.OPEN_PROFILES"

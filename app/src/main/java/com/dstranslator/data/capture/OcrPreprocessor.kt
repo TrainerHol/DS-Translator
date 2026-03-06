@@ -8,6 +8,7 @@ import android.graphics.Paint
 import com.dstranslator.domain.model.CaptureRegion
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.roundToInt
 
 /**
  * Stateless bitmap preprocessing pipeline for OCR.
@@ -21,8 +22,11 @@ class OcrPreprocessor @Inject constructor() {
      *
      * Pipeline:
      * 1. Crop to the specified region (if provided), clamping to bitmap bounds
-     * 2. Upscale small images (height < 100px) by 2x for ML Kit character detection
-     * 3. Convert to grayscale for better OCR contrast
+     * 2. Upscale small images to target height for ML Kit character detection.
+     *    Uses nearest-neighbor interpolation (filter=false) to preserve hard edges
+     *    in pixel fonts common in games like DS/retro titles.
+     * 3. Enhance contrast to sharpen text against backgrounds
+     * 4. Convert to grayscale for better OCR contrast
      *
      * @param bitmap The raw captured bitmap
      * @param region Optional capture region to crop to
@@ -36,18 +40,28 @@ class OcrPreprocessor @Inject constructor() {
             result = cropToRegion(result, region)
         }
 
-        // Step 2: Upscale if too small (ML Kit needs characters >= 16px)
-        if (result.height < MIN_HEIGHT_FOR_OCR) {
-            val scaledWidth = result.width * UPSCALE_FACTOR
-            val scaledHeight = result.height * UPSCALE_FACTOR
-            val scaled = Bitmap.createScaledBitmap(result, scaledWidth, scaledHeight, true)
+        // Step 2: Upscale if too small (ML Kit needs characters >= 16px, target ~200px height)
+        // Uses nearest-neighbor scaling (filter=false) to preserve sharp pixel font edges.
+        // Bilinear filtering blurs pixel fonts, making OCR significantly worse.
+        if (result.height < TARGET_HEIGHT_FOR_OCR) {
+            val scaleFactor = (TARGET_HEIGHT_FOR_OCR.toFloat() / result.height).coerceAtLeast(2f)
+            val scaledWidth = (result.width * scaleFactor).roundToInt()
+            val scaledHeight = (result.height * scaleFactor).roundToInt()
+            val scaled = Bitmap.createScaledBitmap(result, scaledWidth, scaledHeight, false)
             if (scaled !== result && result !== bitmap) {
                 result.recycle()
             }
             result = scaled
         }
 
-        // Step 3: Convert to grayscale for better OCR contrast
+        // Step 3: Enhance contrast for better text/background separation
+        val contrasted = enhanceContrast(result)
+        if (result !== bitmap) {
+            result.recycle()
+        }
+        result = contrasted
+
+        // Step 4: Convert to grayscale for better OCR contrast
         val grayscale = toGrayscale(result)
         if (result !== bitmap) {
             result.recycle()
@@ -71,6 +85,29 @@ class OcrPreprocessor @Inject constructor() {
     }
 
     /**
+     * Enhance contrast using a ColorMatrix to sharpen text against backgrounds.
+     * Increases contrast by 1.5x with slight brightness boost, improving OCR accuracy
+     * for low-contrast pixel font text common in game screenshots.
+     */
+    private fun enhanceContrast(bitmap: Bitmap): Bitmap {
+        val enhanced = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(enhanced)
+        val contrastMatrix = ColorMatrix(
+            floatArrayOf(
+                CONTRAST_SCALE, 0f, 0f, 0f, CONTRAST_TRANSLATE,
+                0f, CONTRAST_SCALE, 0f, 0f, CONTRAST_TRANSLATE,
+                0f, 0f, CONTRAST_SCALE, 0f, CONTRAST_TRANSLATE,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(contrastMatrix)
+        }
+        canvas.drawBitmap(bitmap, 0f, 0f, paint)
+        return enhanced
+    }
+
+    /**
      * Convert a bitmap to grayscale using a ColorMatrix saturation filter.
      */
     private fun toGrayscale(bitmap: Bitmap): Bitmap {
@@ -86,10 +123,16 @@ class OcrPreprocessor @Inject constructor() {
     }
 
     companion object {
-        /** Minimum bitmap height for acceptable OCR accuracy */
-        private const val MIN_HEIGHT_FOR_OCR = 100
+        /** Target bitmap height for OCR - upscale anything below this */
+        private const val TARGET_HEIGHT_FOR_OCR = 200
 
-        /** Scale factor for upscaling small bitmaps */
-        private const val UPSCALE_FACTOR = 2
+        /** Contrast enhancement scale factor (1.0 = no change, >1.0 = more contrast) */
+        private const val CONTRAST_SCALE = 1.5f
+
+        /**
+         * Contrast translation to keep midtones centered after scaling.
+         * Formula: 128 * (1 - scale) = 128 * (1 - 1.5) = -64
+         */
+        private const val CONTRAST_TRANSLATE = -64f
     }
 }

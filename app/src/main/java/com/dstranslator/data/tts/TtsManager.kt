@@ -1,8 +1,10 @@
 package com.dstranslator.data.tts
 
 import android.content.Context
+import android.content.Intent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
+import android.util.Log
 import com.dstranslator.data.settings.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.runBlocking
@@ -14,6 +16,9 @@ import javax.inject.Singleton
 /**
  * Manages Japanese text-to-speech playback and voice selection.
  * Supports listing available Japanese voices and persisting the user's choice.
+ *
+ * Detects whether a Japanese TTS voice is available on the device and exposes
+ * [isJapaneseAvailable] for the UI to show guidance if no voice is installed.
  */
 @Singleton
 class TtsManager @Inject constructor(
@@ -26,15 +31,41 @@ class TtsManager @Inject constructor(
     var isInitialized: Boolean = false
         private set
 
+    /** Whether a Japanese TTS voice is available on this device */
+    var isJapaneseAvailable: Boolean = false
+        private set
+
     /**
      * Initialize the TTS engine. Sets language to Japanese and loads the
      * user's saved voice preference if available.
+     *
+     * After initialization, checks whether Japanese TTS is actually available
+     * and sets [isJapaneseAvailable] accordingly. If no Japanese voice exists,
+     * TTS speak calls will silently fail -- the UI should check this flag and
+     * guide the user to install a TTS engine (e.g., Google TTS from Play Store).
      */
     fun initialize() {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.JAPANESE
+                val langResult = tts?.setLanguage(Locale.JAPANESE)
+                isJapaneseAvailable = langResult != TextToSpeech.LANG_MISSING_DATA &&
+                        langResult != TextToSpeech.LANG_NOT_SUPPORTED
                 isInitialized = true
+
+                if (!isJapaneseAvailable) {
+                    Log.w(TAG, "Japanese TTS not available on this device. " +
+                            "Install Google TTS or another engine with Japanese support.")
+                    // Try to trigger TTS data download
+                    try {
+                        val installIntent = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
+                        installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(installIntent)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not launch TTS data install", e)
+                    }
+                } else {
+                    Log.d(TAG, "Japanese TTS initialized successfully")
+                }
 
                 // Load saved voice preference
                 runBlocking {
@@ -43,6 +74,10 @@ class TtsManager @Inject constructor(
                         setVoice(savedVoiceName)
                     }
                 }
+            } else {
+                Log.e(TAG, "TTS initialization failed with status: $status")
+                isInitialized = false
+                isJapaneseAvailable = false
             }
         }
     }
@@ -86,5 +121,10 @@ class TtsManager @Inject constructor(
         tts?.shutdown()
         tts = null
         isInitialized = false
+        isJapaneseAvailable = false
+    }
+
+    companion object {
+        private const val TAG = "TtsManager"
     }
 }

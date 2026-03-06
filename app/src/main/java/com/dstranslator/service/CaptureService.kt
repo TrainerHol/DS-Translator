@@ -225,6 +225,10 @@ class CaptureService : Service() {
         screenCaptureManagerRef = null
         jmdictRepositoryRef = null
         _latestOcrResult.value = null
+
+        // Keep translations visible after stop so user can review vocabulary.
+        // Only the pipeline state transitions to Idle; translations are preserved
+        // until a new session starts (handleStart generates a new session ID).
         _pipelineState.value = PipelineState.Idle
 
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -401,8 +405,11 @@ class CaptureService : Service() {
 
             val currentText = allTextBlocks.joinToString("\n") { it.text }.trim()
 
-            // Change detection: skip if text is identical to previous (consecutive identical = always skip)
-            if (currentText == previousOcrText || currentText.isBlank()) {
+            // Change detection: skip if text is too similar to previous OCR result.
+            // Uses similarity ratio instead of exact match to handle OCR flicker where
+            // the engine intermittently misses characters (e.g., "ABC" vs "AB"), which
+            // would otherwise trigger repeated translations of essentially the same text.
+            if (currentText.isBlank() || isSimilarText(currentText, previousOcrText)) {
                 _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
                 // Recycle bitmaps
                 preprocessedBitmaps.forEach { pp ->
@@ -523,6 +530,34 @@ class CaptureService : Service() {
     }
 
     /**
+     * Check if two OCR text strings are similar enough to be considered the same text.
+     * Uses character-level similarity to handle OCR flicker where the engine intermittently
+     * misses or misreads a few characters between consecutive captures.
+     *
+     * @return true if texts are similar enough to skip re-translation
+     */
+    private fun isSimilarText(current: String, previous: String): Boolean {
+        if (previous.isEmpty()) return false
+        if (current == previous) return true
+
+        // If one is a substring of the other, it's likely OCR flicker
+        if (current.contains(previous) || previous.contains(current)) return true
+
+        // Compute similarity ratio based on longest common subsequence length
+        val shorter = if (current.length <= previous.length) current else previous
+        val longer = if (current.length > previous.length) current else previous
+
+        if (longer.isEmpty()) return true
+        if (shorter.isEmpty()) return false
+
+        // For short texts, require higher similarity; for longer texts, allow more variance
+        val matchCount = shorter.count { ch -> longer.contains(ch) }
+        val similarity = matchCount.toFloat() / longer.length
+
+        return similarity >= SIMILARITY_THRESHOLD
+    }
+
+    /**
      * Callback for play-audio button taps in the Presentation UI.
      */
     private fun onPlayAudio(text: String) {
@@ -553,6 +588,13 @@ class CaptureService : Service() {
 
     companion object {
         private const val TAG = "CaptureService"
+
+        /**
+         * Similarity threshold for OCR change detection.
+         * Texts with character-level similarity >= this value are treated as "same text"
+         * and won't trigger re-translation. 0.8 = 80% similar characters.
+         */
+        private const val SIMILARITY_THRESHOLD = 0.8f
 
         const val ACTION_START = "com.dstranslator.action.START"
         const val ACTION_CAPTURE = "com.dstranslator.action.CAPTURE"

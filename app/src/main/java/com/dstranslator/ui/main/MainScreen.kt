@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.HorizontalDivider
 import com.dstranslator.domain.model.DictionaryResult
 import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.SegmentedWord
@@ -83,7 +84,10 @@ fun MainScreen(
                 hasApiKey = hasApiKey,
                 onStartCapture = onStartCapture,
                 onNavigateToSettings = onNavigateToSettings,
-                onNavigateToRegionSetup = onNavigateToRegionSetup
+                onNavigateToRegionSetup = onNavigateToRegionSetup,
+                translations = viewModel.translations,
+                onPlayAudio = onPlayAudio,
+                onWordLookup = onWordLookup
             )
         }
     }
@@ -169,6 +173,8 @@ private fun CapturingLayout(
 
 /**
  * Layout shown when idle: full control panel with status, buttons, and warnings.
+ * When translations from a previous session exist, shows them below the controls
+ * so the user can review vocabulary learned during the session.
  */
 @Composable
 private fun IdleLayout(
@@ -178,7 +184,10 @@ private fun IdleLayout(
     hasApiKey: Boolean,
     onStartCapture: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToRegionSetup: () -> Unit
+    onNavigateToRegionSetup: () -> Unit,
+    translations: StateFlow<List<TranslationEntry>>? = null,
+    onPlayAudio: ((String) -> Unit)? = null,
+    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
 ) {
     Column(
         modifier = Modifier
@@ -194,21 +203,23 @@ private fun IdleLayout(
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Status section
         StatusSection(pipelineState = pipelineState)
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Translation count
-        Text(
-            text = "$translationCount translations this session",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-        )
+        if (translationCount > 0) {
+            Text(
+                text = "$translationCount translations from last session",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            )
+        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Warning chips
         if (!hasApiKey) {
@@ -219,8 +230,6 @@ private fun IdleLayout(
             WarningChip(text = "No capture region set")
             Spacer(modifier = Modifier.height(8.dp))
         }
-
-        Spacer(modifier = Modifier.weight(1f))
 
         // Primary action button
         FilledTonalButton(
@@ -238,7 +247,7 @@ private fun IdleLayout(
             Text("Start Capture", style = MaterialTheme.typography.titleMedium)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Secondary action buttons
         Row(
@@ -264,7 +273,30 @@ private fun IdleLayout(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // Show previous session vocabulary if available
+        if (translationCount > 0 && translations != null && onPlayAudio != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+                thickness = 0.5.dp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Session Vocabulary",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Fill remaining space with scrollable translation list
+            TranslationListScreen(
+                translations = translations,
+                onPlayAudio = onPlayAudio,
+                onWordLookup = onWordLookup
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
     }
 }
 
