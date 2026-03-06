@@ -170,7 +170,7 @@ class OverlayPanelView(
      *
      * When unlocked, FLAG_NOT_TOUCHABLE is removed and original alpha restored.
      */
-    fun setLocked(locked: Boolean) {
+    fun setPanelLocked(locked: Boolean) {
         isLocked = locked
         val lp = params ?: return
         val view = composeView ?: return
@@ -271,7 +271,7 @@ class OverlayPanelView(
             // Lock toggle
             IconButton(
                 onClick = {
-                    setLocked(!isLocked)
+                    setPanelLocked(!isLocked)
                 },
                 modifier = Modifier.size(28.dp)
             ) {

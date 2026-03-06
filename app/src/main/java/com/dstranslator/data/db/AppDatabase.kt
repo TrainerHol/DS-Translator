@@ -10,7 +10,8 @@ import androidx.room.RoomDatabase
         WaniKaniAssignmentEntity::class,
         ProfileEntity::class
     ],
-    version = 3
+    version = 3,
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedTranslationDao(): CachedTranslationDao

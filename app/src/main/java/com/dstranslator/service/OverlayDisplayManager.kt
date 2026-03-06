@@ -246,7 +246,7 @@ class OverlayDisplayManager(
      */
     fun setLocked(locked: Boolean) {
         isLocked = locked
-        panelView?.setLocked(locked)
+        panelView?.setPanelLocked(locked)
         sourceLabels?.setTouchable(!locked)
     }
 
