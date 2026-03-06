@@ -115,7 +115,7 @@ Plans:
 **Plans**: 3 plans across 2 waves
 
 Plans:
-- [ ] 06-01-PLAN.md -- OCR preprocessing 4x bicubic + contrast boost, Sudachi init retry, bubble menu Material Design icons (Wave 1)
+- [x] 06-01-PLAN.md -- OCR preprocessing 4x bicubic + contrast boost, Sudachi init retry, bubble menu Material Design icons (Wave 1)
 - [ ] 06-02-PLAN.md -- Bundled TTS engine (sherpa-onnx + Kokoro), TtsManager dual-engine dispatch, settings UI (Wave 1)
 - [ ] 06-03-PLAN.md -- Session vocabulary screen, NavGraph cleanup (remove RegionSetupScreen), capture permission lifecycle separation (Wave 2)
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Learning Features | 1/4 | In progress | - |
 | 4. Profiles and Auto-Read | 0/3 | Not started | - |
 | 5. Overlay Mode | 0/3 | Not started | - |
-| 6. Session Vocabulary, TTS Engine, UX Polish | 0/3 | Not started | - |
+| 6. Session Vocabulary, TTS Engine, UX Polish | 1/3 | In progress | - |

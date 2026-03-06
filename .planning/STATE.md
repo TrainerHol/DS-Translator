@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 05-03-PLAN.md (awaiting on-device verification)
-last_updated: "2026-03-04T07:50:12.725Z"
-last_activity: 2026-03-04 -- Plan 05-03 executed (bubble menu expansion, overlay mode wiring, screen switch)
+status: executing
+stopped_at: Plan 06-01 complete
+last_updated: "2026-03-06T05:12:25.000Z"
+last_activity: 2026-03-06 -- Plan 06-01 executed (OCR preprocessing, Sudachi retry, bubble menu icons)
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 3
   total_plans: 15
-  completed_plans: 13
-  percent: 87
+  completed_plans: 14
+  percent: 93
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Clean, non-intrusive live translation of Japanese games on dual-screen hardware -- game on top, translations on bottom, never interrupting gameplay.
-**Current focus:** Phase 5: Overlay Mode (Phase 4 complete)
+**Current focus:** Phase 6: Session Vocabulary, TTS Engine, UX Cleanup
 
 ## Current Position
 
-Phase: 5 of 5 (Overlay Mode)
-Plan: 3 of 3 in current phase (COMPLETE)
-Status: Plan 05-03 complete (overlay mode integration) -- awaiting on-device verification
-Last activity: 2026-03-04 -- Plan 05-03 executed (bubble menu expansion, overlay mode wiring, screen switch)
+Phase: 6 of 6 (Session Vocabulary, TTS Engine, UX Cleanup)
+Plan: 1 of 2 in current phase (COMPLETE)
+Status: Plan 06-01 complete (OCR preprocessing, Sudachi retry, bubble menu icons)
+Last activity: 2026-03-06 -- Plan 06-01 executed (OCR preprocessing, Sudachi retry, bubble menu icons)
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 8 min
-- Total execution time: 1.52 hours
+- Total execution time: 1.59 hours
 
 **By Phase:**
 
@@ -49,8 +49,8 @@ Progress: [█████████░] 87%
 | 4 | 3 | 16 min | 5.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (10 min), 04-01 (6 min), 04-02 (5 min), 04-03 (5 min), 05-02 (5 min)
-- Trend: Phase 4-5 service/overlay plans consistently fast (5-7 min)
+- Last 5 plans: 04-02 (5 min), 04-03 (5 min), 05-02 (5 min), 05-03 (3 min), 06-01 (4 min)
+- Trend: Plans consistently fast (3-5 min)
 
 *Updated after each plan completion*
 | Phase 03 P01 | 9 | 2 tasks | 8 files |
@@ -61,6 +61,7 @@ Progress: [█████████░] 87%
 | Phase 05 P01 | 7 | 3 tasks | 14 files |
 | Phase 05 P02 | 5 | 2 tasks | 4 files |
 | Phase 05 P03 | 3 | 1 tasks | 3 files |
+| Phase 06 P01 | 4 | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,8 @@ Recent decisions affecting current work:
 - [Phase 05-02]: Tooltip auto-dismiss after 5 seconds via coroutine delay with cancellation
 - [Phase 05]: TTS from overlay uses ACTION_SPEAK intent to CaptureService for service isolation
 - [Phase 05]: Overlay mode activates independently of capture; shows empty until OCR results arrive
+- [06-01]: OcrPreprocessor tests verify contract math (not Bitmap operations) since Robolectric is not available
+- [06-01]: ensureInitialized() uses initializationInProgress flag to prevent concurrent retry attempts
 
 ### Roadmap Evolution
 
@@ -133,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T07:50:12.723Z
-Stopped at: Completed 05-03-PLAN.md (awaiting on-device verification)
-Resume file: None
+Last session: 2026-03-06T05:12:25Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: .planning/phases/06-session-vocabulary-screen-tts-engine-setup-translation-list-ux-cleanup-bubble-menu-state-cleanup/06-01-SUMMARY.md
