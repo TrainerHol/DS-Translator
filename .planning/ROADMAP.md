@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Learning Features** - WaniKani furigana, word segmentation, tap-to-lookup dictionary, JLPT indicators, and additional translation engines
 - [ ] **Phase 4: Profiles and Auto-Read** - Per-game profiles and dialog region auto-read via TTS
 - [ ] **Phase 5: Overlay Mode** - Floating bubble overlay with translation panel for dual-screen games (DS/3DS)
-- [ ] **Phase 6: Session Vocabulary, TTS Engine, UX Polish** - Session vocabulary screen, bundled TTS, OCR improvements, bubble menu cleanup, region UX simplification
+- [x] **Phase 6: Session Vocabulary, TTS Engine, UX Polish** - Session vocabulary screen, bundled TTS, OCR improvements, bubble menu cleanup, region UX simplification (completed 2026-03-06)
 
 ## Phase Details
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Learning Features | 1/4 | In progress | - |
 | 4. Profiles and Auto-Read | 0/3 | Not started | - |
 | 5. Overlay Mode | 0/3 | Not started | - |
-| 6. Session Vocabulary, TTS Engine, UX Polish | 1/3 | In progress | - |
+| 6. Session Vocabulary, TTS Engine, UX Polish | 3/3 | Complete   | 2026-03-06 |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-06T05:18:43Z"
-last_activity: 2026-03-06 -- Plan 06-02 executed (bundled TTS engine, settings UI, voice randomization)
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-03-06T05:26:50Z"
+last_activity: 2026-03-06 -- Plan 06-03 executed (session vocabulary screen, capture lifecycle separation)
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 18
-  completed_plans: 16
-  percent: 89
+  completed_plans: 17
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 6 of 6 (Session Vocabulary, TTS Engine, UX Cleanup)
-Plan: 2 of 3 in current phase (COMPLETE)
-Status: Plan 06-02 complete (sherpa-onnx Kokoro TTS engine integration, dual-engine dispatch)
-Last activity: 2026-03-06 -- Plan 06-02 executed (bundled TTS engine, settings UI, voice randomization)
+Plan: 3 of 3 in current phase (COMPLETE)
+Status: Plan 06-03 complete (session vocabulary screen, capture lifecycle separation, RegionSetupScreen removal)
+Last activity: 2026-03-06 -- Plan 06-03 executed (vocabulary screen, capture permission persistence, region setup cleanup)
 
-Progress: [████████░░] 89%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [████████░░] 89%
 | Phase 05 P03 | 3 | 1 tasks | 3 files |
 | Phase 06 P01 | 4 | 2 tasks | 12 files |
 | Phase 06 P02 | 10 | 2 tasks | 7 files |
+| Phase 06 P03 | 5 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,9 @@ Recent decisions affecting current work:
 - [06-02]: Model files (157MB) excluded from git -- must be downloaded separately for build
 - [06-02]: Bundled TTS engine initializes async on IO thread; system TTS always init as fallback
 - [06-02]: Default engine type is "bundled" for zero-setup Japanese TTS experience
+- [06-03]: ACTION_STOP stops OCR loop only; ACTION_RELEASE_CAPTURE does full MediaProjection teardown
+- [06-03]: VocabularyWord as separate enriched data class (not reusing SegmentedWord)
+- [06-03]: RegionSetupScreen deleted entirely -- region editing via bubble menu pencil overlay only
 
 ### Roadmap Evolution
 
@@ -141,6 +145,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-06T05:18:43Z
-Stopped at: Completed 06-02-PLAN.md
-Resume file: .planning/phases/06-session-vocabulary-screen-tts-engine-setup-translation-list-ux-cleanup-bubble-menu-state-cleanup/06-03-PLAN.md
+Last session: 2026-03-06T05:26:50Z
+Stopped at: Completed 06-03-PLAN.md
+Resume file: Phase 6 complete (all plans executed)
