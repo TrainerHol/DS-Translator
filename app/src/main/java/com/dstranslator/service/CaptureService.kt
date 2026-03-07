@@ -445,7 +445,6 @@ class CaptureService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Pipeline error", e)
             _pipelineState.value = PipelineState.Error("Pipeline error: ${e.message}")
-        }
         } finally {
             captureMutex.unlock()
         }
