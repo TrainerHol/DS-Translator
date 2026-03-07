@@ -59,6 +59,21 @@ object AppModule {
         }
     }
 
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS saved_vocabulary (
+                    dictionaryForm TEXT NOT NULL PRIMARY KEY,
+                    surface TEXT NOT NULL,
+                    reading TEXT NOT NULL,
+                    jlptLevel INTEGER,
+                    definition TEXT,
+                    savedAt INTEGER NOT NULL
+                )
+            """)
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSettingsRepository(
@@ -85,7 +100,7 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "ds_translator.db"
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
     }
 
     @Provides
@@ -110,6 +125,12 @@ object AppModule {
     @Singleton
     fun provideProfileDao(db: AppDatabase): ProfileDao {
         return db.profileDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSavedVocabularyDao(db: AppDatabase): com.dstranslator.data.db.SavedVocabularyDao {
+        return db.savedVocabularyDao()
     }
 
     @Provides

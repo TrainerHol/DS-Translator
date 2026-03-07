@@ -10,6 +10,7 @@ import com.worksap.nlp.sudachi.Tokenizer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.File
@@ -201,7 +202,14 @@ class SudachiSegmenter @Inject constructor(
     suspend fun ensureInitialized(): Boolean {
         if (isInitialized) return true
         if (initFailCount >= MAX_INIT_RETRIES) return false
-        if (initializationInProgress) return false
+        if (initializationInProgress) {
+            repeat(50) {
+                delay(50)
+                if (isInitialized) return true
+                if (!initializationInProgress) return false
+            }
+            return isInitialized
+        }
 
         return try {
             initializationInProgress = true

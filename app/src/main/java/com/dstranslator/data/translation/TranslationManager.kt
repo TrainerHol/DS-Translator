@@ -2,6 +2,7 @@ package com.dstranslator.data.translation
 
 import com.dstranslator.data.cache.TranslationCache
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.data.text.TextNormalizer
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,17 +31,19 @@ class TranslationManager @Inject constructor(
      * returns an error message string.
      */
     suspend fun translate(text: String): String {
+        val normalizedText = TextNormalizer.forTranslationInput(text)
+
         // Check cache first
-        translationCache.get(text)?.let { cached ->
+        translationCache.get(normalizedText)?.let { cached ->
             return cached
         }
 
         // Cache miss -- call translation API via selected engine
-        val result = translateViaApi(text)
+        val result = translateViaApi(normalizedText)
 
         // Store in cache if translation succeeded (not an error message)
         if (!result.startsWith("Translation failed:")) {
-            translationCache.put(text, result)
+            translationCache.put(normalizedText, result)
         }
 
         return result

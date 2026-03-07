@@ -18,12 +18,15 @@ import android.view.WindowManager
 import android.widget.ImageView
 import com.dstranslator.R
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.OverlayMode
 import com.dstranslator.ui.main.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -81,6 +84,12 @@ class FloatingButtonService : Service() {
     // Current display ID for screen switching
     private var currentDisplayId: Int = Display.DEFAULT_DISPLAY
 
+    // Current display context for overlays on the active display
+    private var currentDisplayContext: Context? = null
+
+    // Whether multiple displays are available for switching
+    private var hasMultipleDisplays: Boolean = false
+
     // Region edit overlay (non-null while overlay is visible)
     private var regionEditOverlay: RegionEditOverlay? = null
 
@@ -89,6 +98,17 @@ class FloatingButtonService : Service() {
 
     // Pending region edit flag: set when capture permission needs to be granted first
     private var pendingRegionEdit = false
+
+    private var pendingSingleCapture = false
+    private var pendingContinuousStart = false
+
+    private var pendingRegionEditResetJob: Job? = null
+    private var pendingSingleCaptureResetJob: Job? = null
+    private var pendingContinuousStartResetJob: Job? = null
+
+    // Latest pipeline state tracking for button enable/disable rules
+    private var latestPipelineState: PipelineState = PipelineState.Idle
+    private var latestContinuousActive: Boolean = false
 
     // Menu state
     private var isExpanded = false
@@ -109,7 +129,13 @@ class FloatingButtonService : Service() {
         super.onCreate()
 
         settingsRepository = SettingsRepository(applicationContext)
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        hasMultipleDisplays = displayManager.displays.size >= 2
+
+        val initialDisplay = displayManager.displays.firstOrNull { it.displayId == currentDisplayId }
+            ?: displayManager.displays.firstOrNull()
+        currentDisplayContext = if (initialDisplay != null) createDisplayContext(initialDisplay) else this
+        windowManager = (currentDisplayContext ?: this).getSystemService(WINDOW_SERVICE) as WindowManager
 
         // Inflate the expandable bubble menu layout
         menuView = LayoutInflater.from(this).inflate(R.layout.floating_bubble_menu, null)
@@ -154,7 +180,7 @@ class FloatingButtonService : Service() {
 
         // Set up click listeners for original action buttons
         btnContinuousStart.setOnClickListener {
-            sendCaptureAction(CaptureService.ACTION_START_CONTINUOUS)
+            handleContinuousStartClick()
             collapseMenu()
         }
 
@@ -164,8 +190,7 @@ class FloatingButtonService : Service() {
         }
 
         btnSingleCapture.setOnClickListener {
-            sendCaptureAction(CaptureService.ACTION_CAPTURE)
-            playPulseAnimation(btnBubble)
+            handleSingleCaptureClick()
             collapseMenu()
         }
 
@@ -179,11 +204,10 @@ class FloatingButtonService : Service() {
 
         // Auto-read toggle: Toggle via SettingsRepository
         btnAutoReadToggle.setOnClickListener {
-            observerScope.launch {
-                val newState = !isAutoReadActive
-                settingsRepository.setAutoReadEnabled(newState)
-                // State will be updated via the Flow observer below
-            }
+            val newState = !isAutoReadActive
+            isAutoReadActive = newState
+            updateAutoReadButtonAppearance(newState)
+            observerScope.launch(Dispatchers.IO) { settingsRepository.setAutoReadEnabled(newState) }
             collapseMenu()
         }
 
@@ -223,16 +247,10 @@ class FloatingButtonService : Service() {
         // When inactive: show start button normal, dim stop button.
         observerScope.launch {
             CaptureService.isContinuousActive.collect { isActive ->
+                latestContinuousActive = isActive
                 val bgRes = if (isActive) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
                 btnBubble.setBackgroundResource(bgRes)
-
-                // Start button: dim when already running, normal when stopped
-                btnContinuousStart.alpha = if (isActive) BUTTON_DIMMED_ALPHA else BUTTON_ACTIVE_ALPHA
-                btnContinuousStart.isEnabled = !isActive
-
-                // Stop button: normal when running, dim when stopped
-                btnContinuousStop.alpha = if (isActive) BUTTON_ACTIVE_ALPHA else BUTTON_DIMMED_ALPHA
-                btnContinuousStop.isEnabled = isActive
+                updateActionButtonStates()
             }
         }
 
@@ -240,8 +258,7 @@ class FloatingButtonService : Service() {
         observerScope.launch {
             settingsRepository.autoReadEnabledFlow().collect { enabled ->
                 isAutoReadActive = enabled
-                val bgRes = if (enabled) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
-                btnAutoReadToggle.setBackgroundResource(bgRes)
+                updateAutoReadButtonAppearance(enabled)
             }
         }
 
@@ -258,18 +275,85 @@ class FloatingButtonService : Service() {
         // and update button enabled states based on capture service state
         observerScope.launch {
             CaptureService.pipelineState.collect { state ->
-                if (pendingRegionEdit && CaptureService.screenCaptureManagerRef != null) {
-                    pendingRegionEdit = false
-                    openRegionEditOverlay()
+                latestPipelineState = state
+                val captureReady = CaptureService.screenCaptureManagerRef != null
+                if (captureReady) {
+                    if (pendingRegionEdit) {
+                        pendingRegionEdit = false
+                        openRegionEditOverlay()
+                    }
+                    if (pendingSingleCapture) {
+                        pendingSingleCapture = false
+                        sendCaptureAction(CaptureService.ACTION_CAPTURE)
+                        playPulseAnimation(btnBubble)
+                    }
+                    if (pendingContinuousStart) {
+                        pendingContinuousStart = false
+                        sendCaptureAction(CaptureService.ACTION_START_CONTINUOUS)
+                    }
                 }
-
-                // Screen switch only makes sense when overlay is active
-                btnScreenSwitch.alpha = if (currentOverlayMode != OverlayMode.Off) BUTTON_ACTIVE_ALPHA else BUTTON_DIMMED_ALPHA
+                updateActionButtonStates()
             }
         }
 
         // Add menu to window
         windowManager.addView(menuView, params)
+        updateActionButtonStates()
+    }
+
+    private fun updateAutoReadButtonAppearance(enabled: Boolean) {
+        val bgRes = if (enabled) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
+        btnAutoReadToggle.setBackgroundResource(bgRes)
+    }
+
+    private fun setButtonEnabled(button: ImageView, enabled: Boolean) {
+        button.isEnabled = enabled
+        button.alpha = if (enabled) BUTTON_ACTIVE_ALPHA else BUTTON_DIMMED_ALPHA
+    }
+
+    private fun updateActionButtonStates() {
+        val state = latestPipelineState
+        val isBusy = state is PipelineState.Capturing || state is PipelineState.Processing
+        val isContinuous = latestContinuousActive
+
+        setButtonEnabled(btnContinuousStart, enabled = !isContinuous && !isBusy)
+        setButtonEnabled(btnContinuousStop, enabled = isContinuous)
+        setButtonEnabled(btnSingleCapture, enabled = !isBusy && !isContinuous)
+
+        setButtonEnabled(btnRegionEdit, enabled = regionEditOverlay == null)
+        setButtonEnabled(btnAutoReadToggle, enabled = true)
+        setButtonEnabled(btnProfile, enabled = true)
+        setButtonEnabled(btnOverlayMode, enabled = true)
+        setButtonEnabled(btnScreenSwitch, enabled = hasMultipleDisplays)
+    }
+
+    private fun handleContinuousStartClick() {
+        if (CaptureService.screenCaptureManagerRef != null) {
+            sendCaptureAction(CaptureService.ACTION_START_CONTINUOUS)
+            return
+        }
+        pendingContinuousStart = true
+        schedulePendingContinuousStartReset()
+        requestCapturePermissionFromBubble()
+    }
+
+    private fun handleSingleCaptureClick() {
+        if (CaptureService.screenCaptureManagerRef != null) {
+            sendCaptureAction(CaptureService.ACTION_CAPTURE)
+            playPulseAnimation(btnBubble)
+            return
+        }
+        pendingSingleCapture = true
+        schedulePendingSingleCaptureReset()
+        requestCapturePermissionFromBubble()
+    }
+
+    private fun requestCapturePermissionFromBubble() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = MainActivity.ACTION_START_CAPTURE_FROM_BUBBLE
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        startActivity(intent)
     }
 
     /**
@@ -349,6 +433,8 @@ class FloatingButtonService : Service() {
             return
         }
 
+        removeRegionEditOverlay()
+
         // Find target display (the one we're NOT currently on)
         val targetDisplay = allDisplays.firstOrNull { it.displayId != currentDisplayId }
             ?: allDisplays.first()
@@ -366,6 +452,7 @@ class FloatingButtonService : Service() {
 
         // Create new display context and WindowManager for target display
         val targetContext = createDisplayContext(targetDisplay)
+        currentDisplayContext = targetContext
         windowManager = targetContext.getSystemService(WINDOW_SERVICE) as WindowManager
 
         // Restore or use default position for the target display
@@ -380,6 +467,7 @@ class FloatingButtonService : Service() {
 
         // Update current display tracking
         currentDisplayId = targetDisplay.displayId
+        hasMultipleDisplays = allDisplays.size >= 2
 
         // If overlay mode is active, recreate overlay on the new display
         if (currentOverlayMode != OverlayMode.Off) {
@@ -403,6 +491,7 @@ class FloatingButtonService : Service() {
             overlayDisplayManager?.switchMode(currentOverlayMode)
         }
 
+        updateActionButtonStates()
         Log.d(TAG, "Bubble and overlay switched to display ${targetDisplay.displayId}")
     }
 
@@ -422,7 +511,45 @@ class FloatingButtonService : Service() {
             // Permission not held -- trigger capture permission flow
             // and set pending flag to open overlay after grant
             pendingRegionEdit = true
-            sendCaptureAction(CaptureService.ACTION_START)
+            schedulePendingRegionEditReset()
+            val intent = Intent(this, MainActivity::class.java).apply {
+                action = MainActivity.ACTION_START_CAPTURE_THEN_EDIT_REGIONS
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+        }
+    }
+
+    private fun schedulePendingRegionEditReset() {
+        pendingRegionEditResetJob?.cancel()
+        pendingRegionEditResetJob = observerScope.launch {
+            delay(PENDING_RESET_TIMEOUT_MS)
+            if (pendingRegionEdit && CaptureService.screenCaptureManagerRef == null) {
+                pendingRegionEdit = false
+                updateActionButtonStates()
+            }
+        }
+    }
+
+    private fun schedulePendingSingleCaptureReset() {
+        pendingSingleCaptureResetJob?.cancel()
+        pendingSingleCaptureResetJob = observerScope.launch {
+            delay(PENDING_RESET_TIMEOUT_MS)
+            if (pendingSingleCapture && CaptureService.screenCaptureManagerRef == null) {
+                pendingSingleCapture = false
+                updateActionButtonStates()
+            }
+        }
+    }
+
+    private fun schedulePendingContinuousStartReset() {
+        pendingContinuousStartResetJob?.cancel()
+        pendingContinuousStartResetJob = observerScope.launch {
+            delay(PENDING_RESET_TIMEOUT_MS)
+            if (pendingContinuousStart && CaptureService.screenCaptureManagerRef == null) {
+                pendingContinuousStart = false
+                updateActionButtonStates()
+            }
         }
     }
 
@@ -434,7 +561,7 @@ class FloatingButtonService : Service() {
         // Don't open if already showing
         if (regionEditOverlay != null) return
 
-        val overlay = RegionEditOverlay(this)
+        val overlay = RegionEditOverlay(currentDisplayContext ?: this)
 
         // Load existing regions
         observerScope.launch {
@@ -469,6 +596,7 @@ class FloatingButtonService : Service() {
 
         windowManager.addView(overlay, overlayParams)
         regionEditOverlay = overlay
+        updateActionButtonStates()
     }
 
     /**
@@ -483,6 +611,7 @@ class FloatingButtonService : Service() {
             }
         }
         regionEditOverlay = null
+        updateActionButtonStates()
     }
 
     @Suppress("ClickableViewAccessibility")
@@ -551,10 +680,11 @@ class FloatingButtonService : Service() {
             button.visibility = View.VISIBLE
             button.alpha = 0f
             button.translationX = -20f
+            val targetAlpha = if (button.isEnabled) BUTTON_ACTIVE_ALPHA else BUTTON_DIMMED_ALPHA
 
             ObjectAnimator.ofPropertyValuesHolder(
                 button,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0f, targetAlpha),
                 PropertyValuesHolder.ofFloat(View.TRANSLATION_X, -20f, 0f)
             ).apply {
                 duration = EXPAND_DURATION_MS
@@ -581,9 +711,10 @@ class FloatingButtonService : Service() {
         )
 
         allButtons.forEachIndexed { index, button ->
+            val startAlpha = button.alpha
             ObjectAnimator.ofPropertyValuesHolder(
                 button,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0f),
+                PropertyValuesHolder.ofFloat(View.ALPHA, startAlpha, 0f),
                 PropertyValuesHolder.ofFloat(View.TRANSLATION_X, 0f, -20f)
             ).apply {
                 duration = EXPAND_DURATION_MS
@@ -631,6 +762,13 @@ class FloatingButtonService : Service() {
         overlayDisplayManager?.cleanup()
         overlayDisplayManager = null
 
+        pendingRegionEditResetJob?.cancel()
+        pendingRegionEditResetJob = null
+        pendingSingleCaptureResetJob?.cancel()
+        pendingSingleCaptureResetJob = null
+        pendingContinuousStartResetJob?.cancel()
+        pendingContinuousStartResetJob = null
+
         removeRegionEditOverlay()
         observerScope.cancel()
         try {
@@ -663,5 +801,7 @@ class FloatingButtonService : Service() {
 
         /** Intent action to open profiles section in MainActivity */
         const val ACTION_OPEN_PROFILES = "com.dstranslator.action.OPEN_PROFILES"
+
+        private const val PENDING_RESET_TIMEOUT_MS = 45_000L
     }
 }

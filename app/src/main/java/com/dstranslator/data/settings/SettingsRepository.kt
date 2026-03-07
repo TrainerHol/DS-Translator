@@ -249,6 +249,10 @@ class SettingsRepository @Inject constructor(
             val array = JSONArray(json)
             (0 until array.length()).map { i ->
                 val obj = array.getJSONObject(i)
+                val nx = obj.optDouble("nx", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                val ny = obj.optDouble("ny", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                val nw = obj.optDouble("nw", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                val nh = obj.optDouble("nh", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
                 CaptureRegion(
                     x = obj.getInt("x"),
                     y = obj.getInt("y"),
@@ -256,7 +260,11 @@ class SettingsRepository @Inject constructor(
                     height = obj.getInt("height"),
                     id = obj.optString("id", "default"),
                     label = obj.optString("label", ""),
-                    autoRead = obj.optBoolean("autoRead", false)
+                    autoRead = obj.optBoolean("autoRead", false),
+                    normalizedX = nx,
+                    normalizedY = ny,
+                    normalizedWidth = nw,
+                    normalizedHeight = nh
                 )
             }
         } catch (e: Exception) {
@@ -278,6 +286,10 @@ class SettingsRepository @Inject constructor(
                 put("id", region.id)
                 put("label", region.label)
                 put("autoRead", region.autoRead)
+                region.normalizedX?.let { put("nx", it.toDouble()) }
+                region.normalizedY?.let { put("ny", it.toDouble()) }
+                region.normalizedWidth?.let { put("nw", it.toDouble()) }
+                region.normalizedHeight?.let { put("nh", it.toDouble()) }
             }
             array.put(obj)
         }
@@ -512,6 +524,10 @@ class SettingsRepository @Inject constructor(
                 put("id", region.id)
                 put("label", region.label)
                 put("autoRead", region.autoRead)
+                region.normalizedX?.let { put("nx", it.toDouble()) }
+                region.normalizedY?.let { put("ny", it.toDouble()) }
+                region.normalizedWidth?.let { put("nw", it.toDouble()) }
+                region.normalizedHeight?.let { put("nh", it.toDouble()) }
             }
             array.put(obj)
         }

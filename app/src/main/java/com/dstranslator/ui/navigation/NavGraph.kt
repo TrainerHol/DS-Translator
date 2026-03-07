@@ -15,7 +15,8 @@ import com.dstranslator.ui.main.MainScreen
 import com.dstranslator.ui.main.MainViewModel
 import com.dstranslator.ui.settings.SettingsScreen
 import com.dstranslator.ui.settings.SettingsViewModel
-import com.dstranslator.ui.vocabulary.VocabularyScreen
+import com.dstranslator.ui.captures.SessionCapturesScreen
+import com.dstranslator.ui.savedvocab.SavedVocabularyScreen
 
 /**
  * Navigation graph connecting Main, Settings, and Vocabulary screens.
@@ -54,10 +55,9 @@ fun NavGraph(
                 viewModel = viewModel,
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToVocabulary = { navController.navigate("vocabulary") },
+                onNavigateToSavedVocabulary = { navController.navigate("savedVocabulary") },
                 onStartCapture = onStartCapture,
-                onStopCapture = onStopCapture,
-                onPlayAudio = viewModel::onPlayAudio,
-                onWordLookup = viewModel::onWordLookup
+                onStopCapture = onStopCapture
             )
         }
         composable(
@@ -78,7 +78,12 @@ fun NavGraph(
             )
         }
         composable("vocabulary") {
-            VocabularyScreen(
+            SessionCapturesScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("savedVocabulary") {
+            SavedVocabularyScreen(
                 onBack = { navController.popBackStack() }
             )
         }

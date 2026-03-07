@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,7 +56,8 @@ import kotlinx.coroutines.launch
 fun TranslationListScreen(
     translations: StateFlow<List<TranslationEntry>>,
     onPlayAudio: (String) -> Unit,
-    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
+    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null,
+    onSaveVocabulary: ((TranslationEntry) -> Unit)? = null
 ) {
     val entries by translations.collectAsState()
     val listState = rememberLazyListState()
@@ -108,6 +110,7 @@ fun TranslationListScreen(
                     TranslationEntryItem(
                         entry = entry,
                         onPlayAudio = onPlayAudio,
+                        onSaveVocabulary = onSaveVocabulary,
                         onWordTap = { word ->
                             if (onWordLookup != null) {
                                 selectedWord = word
@@ -149,6 +152,7 @@ fun TranslationListScreen(
 fun TranslationEntryItem(
     entry: TranslationEntry,
     onPlayAudio: (String) -> Unit,
+    onSaveVocabulary: ((TranslationEntry) -> Unit)? = null,
     onWordTap: ((SegmentedWord) -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -198,6 +202,16 @@ fun TranslationEntryItem(
                     contentDescription = "Play audio",
                     tint = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            if (onSaveVocabulary != null && entry.segmentedWords.isNotEmpty()) {
+                IconButton(onClick = { onSaveVocabulary(entry) }) {
+                    Icon(
+                        imageVector = Icons.Default.BookmarkAdd,
+                        contentDescription = "Save vocabulary",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 

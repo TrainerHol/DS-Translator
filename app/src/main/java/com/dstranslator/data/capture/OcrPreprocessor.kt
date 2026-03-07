@@ -6,6 +6,7 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import com.dstranslator.domain.model.CaptureRegion
+import com.dstranslator.domain.model.resolveToPixelRect
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -75,13 +76,8 @@ class OcrPreprocessor @Inject constructor() {
      * to avoid IndexOutOfBoundsException.
      */
     private fun cropToRegion(bitmap: Bitmap, region: CaptureRegion): Bitmap {
-        // Clamp region to bitmap bounds
-        val x = region.x.coerceIn(0, bitmap.width - 1)
-        val y = region.y.coerceIn(0, bitmap.height - 1)
-        val width = region.width.coerceIn(1, bitmap.width - x)
-        val height = region.height.coerceIn(1, bitmap.height - y)
-
-        return Bitmap.createBitmap(bitmap, x, y, width, height)
+        val rect = region.resolveToPixelRect(bitmap.width, bitmap.height)
+        return Bitmap.createBitmap(bitmap, rect.x, rect.y, rect.width, rect.height)
     }
 
     /**

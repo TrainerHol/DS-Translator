@@ -95,6 +95,9 @@ class MainActivity : ComponentActivity() {
             ACTION_OPEN_PROFILES -> {
                 navController?.navigate("settings?section=profiles")
             }
+            ACTION_START_CAPTURE_FROM_BUBBLE -> {
+                onStartCapture()
+            }
             ACTION_START_CAPTURE_THEN_EDIT_REGIONS -> {
                 // Trigger normal capture permission flow.
                 // FloatingButtonService handles the region edit overlay opening via
@@ -186,6 +189,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_OPEN_PROFILES = "com.dstranslator.action.OPEN_PROFILES"
+        const val ACTION_START_CAPTURE_FROM_BUBBLE = "com.dstranslator.action.START_CAPTURE_FROM_BUBBLE"
         const val ACTION_START_CAPTURE_THEN_EDIT_REGIONS = "com.dstranslator.action.START_CAPTURE_THEN_EDIT_REGIONS"
     }
 }

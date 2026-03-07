@@ -19,6 +19,7 @@ import android.view.WindowManager
 import com.dstranslator.R
 import com.dstranslator.data.capture.OcrPreprocessor
 import com.dstranslator.data.capture.ScreenCaptureManager
+import com.dstranslator.data.ocr.OcrVotingService
 import com.dstranslator.data.db.ProfileDao
 import com.dstranslator.data.dictionary.JMdictRepository
 import com.dstranslator.data.segmentation.FuriganaResolver
@@ -32,6 +33,7 @@ import com.dstranslator.domain.model.OcrResult
 import com.dstranslator.domain.model.OcrTextBlock
 import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.TranslationEntry
+import com.dstranslator.domain.model.resolveForBitmap
 import com.dstranslator.ui.presentation.TranslationPresentation
 import dagger.hilt.android.AndroidEntryPoint
 import com.dstranslator.data.db.TranslationHistoryDao
@@ -47,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.util.UUID
 import javax.inject.Inject
 
@@ -70,6 +73,7 @@ class CaptureService : Service() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var screenCaptureManager: ScreenCaptureManager
     @Inject lateinit var ocrPreprocessor: OcrPreprocessor
+    @Inject lateinit var ocrVotingService: OcrVotingService
     @Inject lateinit var translationHistoryDao: TranslationHistoryDao
     @Inject lateinit var profileDao: ProfileDao
     @Inject lateinit var sudachiSegmenter: SudachiSegmenter
@@ -78,7 +82,7 @@ class CaptureService : Service() {
 
     private var mediaProjection: MediaProjection? = null
     private var presentation: TranslationPresentation? = null
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var continuousCaptureJob: Job? = null
     private var previousOcrText: String = ""
@@ -87,9 +91,17 @@ class CaptureService : Service() {
     /** Per-region text tracking for auto-read (replaces global previousOcrText for auto-read decisions) */
     private val previousRegionTexts = mutableMapOf<String, String>()
 
+    /** Prevent overlapping capture/OCR/translate runs from rapid taps or mode switches. */
+    private val captureMutex = Mutex()
+
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
             Log.d(TAG, "MediaProjection stopped by system")
+            continuousCaptureJob?.cancel()
+            continuousCaptureJob = null
+            _isContinuousActive.value = false
+            screenCaptureManagerRef = null
+            _pipelineState.value = PipelineState.Error("Screen capture permission ended")
             stopSelf()
         }
     }
@@ -365,12 +377,22 @@ class CaptureService : Service() {
      * 5. Persist to Room history (Flow collection updates translations StateFlow)
      */
     private suspend fun captureAndTranslate() {
+        if (!captureMutex.tryLock()) {
+            return
+        }
+
+        try {
         try {
             _pipelineState.value = PipelineState.Capturing
 
             val bitmap = screenCaptureManager.acquireScreenshot()
             if (bitmap == null) {
-                _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Error("Failed to capture screenshot")
+                if (_isContinuousActive.value) {
+                    continuousCaptureJob?.cancel()
+                    continuousCaptureJob = null
+                    _isContinuousActive.value = false
+                }
+                _pipelineState.value = PipelineState.Error("Failed to capture screenshot")
                 return
             }
 
@@ -390,10 +412,14 @@ class CaptureService : Service() {
             val preprocessedBitmaps = mutableListOf<android.graphics.Bitmap>()
             val regionTextMap = mutableMapOf<String, String>()
 
-            for (region in regions) {
+            val resolvedRegions = regions.map { region ->
+                region?.resolveForBitmap(bitmap.width, bitmap.height)
+            }
+
+            for (region in resolvedRegions) {
                 val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
                 preprocessedBitmaps.add(preprocessed)
-                val textBlocks = ocrEngine.recognize(preprocessed)
+                val textBlocks = ocrVotingService.recognizeWithVoting(preprocessed, runs = 3)
                 allTextBlocks.addAll(textBlocks)
                 // Track per-region OCR text for auto-read
                 if (region != null) {
@@ -404,7 +430,7 @@ class CaptureService : Service() {
             // Publish OCR result with coordinate metadata for overlay-on-source positioning
             _latestOcrResult.value = OcrResult(
                 textBlocks = allTextBlocks.toList(),
-                captureRegion = regions.firstOrNull(),
+                captureRegion = resolvedRegions.firstOrNull(),
                 preprocessedWidth = preprocessedBitmaps.firstOrNull()?.width ?: 0,
                 preprocessedHeight = preprocessedBitmaps.firstOrNull()?.height ?: 0
             )
@@ -495,7 +521,7 @@ class CaptureService : Service() {
             if (autoReadEnabled) {
                 val flushMode = settingsRepository.getAutoReadFlushMode()
                 val queueMode = AutoReadHelper.getQueueMode(flushMode)
-                for (region in regions) {
+                for (region in resolvedRegions) {
                     if (region != null) {
                         val regionText = regionTextMap[region.id] ?: ""
                         val previousText = previousRegionTexts[region.id]
@@ -517,6 +543,9 @@ class CaptureService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Pipeline error", e)
             _pipelineState.value = PipelineState.Error("Pipeline error: ${e.message}")
+        }
+        } finally {
+            captureMutex.unlock()
         }
     }
 
@@ -561,6 +590,8 @@ class CaptureService : Service() {
     private fun isSimilarText(current: String, previous: String): Boolean {
         if (previous.isEmpty()) return false
         if (current == previous) return true
+        if (current.length < (previous.length * 0.6f)) return false
+        if (previous.length < (current.length * 0.6f)) return false
 
         // If one is a substring of the other, it's likely OCR flicker
         if (current.contains(previous) || previous.contains(current)) return true

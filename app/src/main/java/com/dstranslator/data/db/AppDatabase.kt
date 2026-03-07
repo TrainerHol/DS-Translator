@@ -8,9 +8,10 @@ import androidx.room.RoomDatabase
         CachedTranslationEntity::class,
         TranslationHistoryEntity::class,
         WaniKaniAssignmentEntity::class,
-        ProfileEntity::class
+        ProfileEntity::class,
+        SavedVocabularyEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -18,4 +19,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun translationHistoryDao(): TranslationHistoryDao
     abstract fun waniKaniDao(): WaniKaniDao
     abstract fun profileDao(): ProfileDao
+    abstract fun savedVocabularyDao(): SavedVocabularyDao
 }

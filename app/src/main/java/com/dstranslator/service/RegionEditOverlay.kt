@@ -49,6 +49,7 @@ class RegionEditOverlay(context: Context) : View(context) {
     private var drawState: DrawState = DrawState.Idle
     private val regions = mutableListOf<EditableRegion>()
     private var selectedRegionIndex: Int = -1
+    private var pendingExistingRegions: List<CaptureRegion>? = null
 
     // Temporary rectangle while drawing
     private var tempRect: RectF? = null
@@ -142,24 +143,63 @@ class RegionEditOverlay(context: Context) : View(context) {
      * Converts CaptureRegion coordinates to EditableRegion with RectF bounds.
      */
     fun setExistingRegions(existingRegions: List<CaptureRegion>) {
+        pendingExistingRegions = existingRegions
+        applyPendingExistingRegionsIfReady()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        applyPendingExistingRegionsIfReady()
+    }
+
+    private fun applyPendingExistingRegionsIfReady() {
+        val existing = pendingExistingRegions ?: return
+        if (width <= 0 || height <= 0) return
+
         regions.clear()
-        existingRegions.forEach { region ->
+
+        val viewWidth = width.toFloat()
+        val viewHeight = height.toFloat()
+
+        existing.forEach { region ->
+            val bounds = if (
+                region.normalizedX != null &&
+                region.normalizedY != null &&
+                region.normalizedWidth != null &&
+                region.normalizedHeight != null
+            ) {
+                val left = (region.normalizedX.coerceIn(0f, 1f) * viewWidth)
+                    .coerceIn(0f, viewWidth)
+                val top = (region.normalizedY.coerceIn(0f, 1f) * viewHeight)
+                    .coerceIn(0f, viewHeight)
+                val right = ((region.normalizedX + region.normalizedWidth).coerceIn(0f, 1f) * viewWidth)
+                    .coerceIn(left + 1f, viewWidth)
+                val bottom = ((region.normalizedY + region.normalizedHeight).coerceIn(0f, 1f) * viewHeight)
+                    .coerceIn(top + 1f, viewHeight)
+                RectF(left, top, right, bottom)
+            } else {
+                RectF(
+                    region.x.toFloat(),
+                    region.y.toFloat(),
+                    (region.x + region.width).toFloat(),
+                    (region.y + region.height).toFloat()
+                )
+            }
+
             regions.add(
                 EditableRegion(
-                    bounds = RectF(
-                        region.x.toFloat(),
-                        region.y.toFloat(),
-                        (region.x + region.width).toFloat(),
-                        (region.y + region.height).toFloat()
-                    ),
+                    bounds = bounds,
                     id = region.id,
                     autoRead = region.autoRead
                 )
             )
         }
+
         if (regions.isNotEmpty()) {
             selectedRegionIndex = 0
         }
+
+        pendingExistingRegions = null
         invalidate()
     }
 
@@ -461,14 +501,31 @@ class RegionEditOverlay(context: Context) : View(context) {
         when {
             confirmButtonRect.contains(x, y) -> {
                 // Convert all EditableRegion to CaptureRegion and confirm
+                val viewWidth = width.toFloat().coerceAtLeast(1f)
+                val viewHeight = height.toFloat().coerceAtLeast(1f)
+
                 val captureRegions = regions.map { editableRegion ->
+                    val left = editableRegion.bounds.left.coerceIn(0f, viewWidth)
+                    val top = editableRegion.bounds.top.coerceIn(0f, viewHeight)
+                    val right = editableRegion.bounds.right.coerceIn(left + 1f, viewWidth)
+                    val bottom = editableRegion.bounds.bottom.coerceIn(top + 1f, viewHeight)
+
+                    val nx = (left / viewWidth).coerceIn(0f, 1f)
+                    val ny = (top / viewHeight).coerceIn(0f, 1f)
+                    val nw = ((right - left) / viewWidth).coerceIn(0f, 1f)
+                    val nh = ((bottom - top) / viewHeight).coerceIn(0f, 1f)
+
                     CaptureRegion(
-                        x = editableRegion.bounds.left.toInt(),
-                        y = editableRegion.bounds.top.toInt(),
-                        width = editableRegion.bounds.width().toInt(),
-                        height = editableRegion.bounds.height().toInt(),
+                        x = left.toInt(),
+                        y = top.toInt(),
+                        width = (right - left).toInt().coerceAtLeast(1),
+                        height = (bottom - top).toInt().coerceAtLeast(1),
                         id = editableRegion.id,
-                        autoRead = editableRegion.autoRead
+                        autoRead = editableRegion.autoRead,
+                        normalizedX = nx,
+                        normalizedY = ny,
+                        normalizedWidth = nw,
+                        normalizedHeight = nh
                     )
                 }
                 onRegionsConfirmed?.invoke(captureRegions)

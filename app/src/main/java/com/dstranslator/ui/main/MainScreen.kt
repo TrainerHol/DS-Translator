@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.PlayArrow
@@ -31,35 +32,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.HorizontalDivider
-import com.dstranslator.domain.model.DictionaryResult
 import com.dstranslator.domain.model.PipelineState
-import com.dstranslator.domain.model.SegmentedWord
-import com.dstranslator.domain.model.TranslationEntry
-import com.dstranslator.ui.presentation.TranslationListScreen
-import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Primary app screen with start/stop capture controls, pipeline status display,
- * and navigation to settings and session vocabulary.
- *
- * When capturing is active, switches to a compact top bar with an embedded
- * TranslationListScreen showing translations in real-time.
+ * and navigation to settings and session captures.
  */
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
     onNavigateToSettings: () -> Unit,
     onNavigateToVocabulary: () -> Unit,
+    onNavigateToSavedVocabulary: () -> Unit,
     onStartCapture: () -> Unit,
-    onStopCapture: () -> Unit,
-    onPlayAudio: (String) -> Unit,
-    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
+    onStopCapture: () -> Unit
 ) {
     val pipelineState by viewModel.pipelineState.collectAsState()
     val isCapturing by viewModel.isCapturing.collectAsState()
     val translationCount by viewModel.translationCount.collectAsState()
-    val hasRegion by viewModel.hasRegion.collectAsState()
     val hasApiKey by viewModel.hasApiKey.collectAsState()
 
     Surface(
@@ -70,24 +60,20 @@ fun MainScreen(
             CapturingLayout(
                 pipelineState = pipelineState,
                 translationCount = translationCount,
-                translations = viewModel.translations,
                 onStopCapture = onStopCapture,
+                onNavigateToVocabulary = onNavigateToVocabulary,
+                onNavigateToSavedVocabulary = onNavigateToSavedVocabulary,
                 onNavigateToSettings = onNavigateToSettings,
-                onPlayAudio = onPlayAudio,
-                onWordLookup = onWordLookup
             )
         } else {
             IdleLayout(
                 pipelineState = pipelineState,
                 translationCount = translationCount,
-                hasRegion = hasRegion,
                 hasApiKey = hasApiKey,
                 onStartCapture = onStartCapture,
                 onNavigateToSettings = onNavigateToSettings,
                 onNavigateToVocabulary = onNavigateToVocabulary,
-                translations = viewModel.translations,
-                onPlayAudio = onPlayAudio,
-                onWordLookup = onWordLookup
+                onNavigateToSavedVocabulary = onNavigateToSavedVocabulary
             )
         }
     }
@@ -100,11 +86,10 @@ fun MainScreen(
 private fun CapturingLayout(
     pipelineState: PipelineState,
     translationCount: Int,
-    translations: StateFlow<List<TranslationEntry>>,
     onStopCapture: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onPlayAudio: (String) -> Unit,
-    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
+    onNavigateToVocabulary: () -> Unit,
+    onNavigateToSavedVocabulary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Compact top bar
@@ -143,6 +128,20 @@ private fun CapturingLayout(
 
                 Spacer(modifier = Modifier.weight(1f))
 
+                IconButton(onClick = onNavigateToVocabulary) {
+                    Icon(
+                        imageVector = Icons.Default.FormatListBulleted,
+                        contentDescription = "Captures",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onNavigateToSavedVocabulary) {
+                    Icon(
+                        imageVector = Icons.Default.Bookmark,
+                        contentDescription = "Saved vocabulary",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 IconButton(onClick = onNavigateToSettings) {
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -162,12 +161,16 @@ private fun CapturingLayout(
             }
         }
 
-        // Embedded translation list fills remaining space
-        TranslationListScreen(
-            translations = translations,
-            onPlayAudio = onPlayAudio,
-            onWordLookup = onWordLookup
-        )
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Capturing… Open Captures to review.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -180,14 +183,11 @@ private fun CapturingLayout(
 private fun IdleLayout(
     pipelineState: PipelineState,
     translationCount: Int,
-    hasRegion: Boolean,
     hasApiKey: Boolean,
     onStartCapture: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToVocabulary: () -> Unit,
-    translations: StateFlow<List<TranslationEntry>>? = null,
-    onPlayAudio: ((String) -> Unit)? = null,
-    onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)? = null
+    onNavigateToSavedVocabulary: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -226,10 +226,6 @@ private fun IdleLayout(
             WarningChip(text = "No API key configured -- using on-device translation")
             Spacer(modifier = Modifier.height(8.dp))
         }
-        if (!hasRegion) {
-            WarningChip(text = "No capture region set")
-            Spacer(modifier = Modifier.height(8.dp))
-        }
 
         // Primary action button
         FilledTonalButton(
@@ -262,7 +258,16 @@ private fun IdleLayout(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Vocabulary")
+                Text("Captures")
+            }
+            FilledTonalButton(onClick = onNavigateToSavedVocabulary) {
+                Icon(
+                    imageVector = Icons.Default.Bookmark,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Saved")
             }
             IconButton(onClick = onNavigateToSettings) {
                 Icon(
@@ -273,30 +278,7 @@ private fun IdleLayout(
             }
         }
 
-        // Show previous session vocabulary if available
-        if (translationCount > 0 && translations != null && onPlayAudio != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
-                thickness = 0.5.dp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Session Vocabulary",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Fill remaining space with scrollable translation list
-            TranslationListScreen(
-                translations = translations,
-                onPlayAudio = onPlayAudio,
-                onWordLookup = onWordLookup
-            )
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
-        }
+        Spacer(modifier = Modifier.weight(1f))
     }
 }
 
