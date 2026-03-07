@@ -1,6 +1,7 @@
 package com.dstranslator.data.segmentation
 
 import android.content.Context
+import android.content.res.AssetManager
 import com.dstranslator.domain.model.SegmentedWord
 import com.worksap.nlp.sudachi.Config
 import com.worksap.nlp.sudachi.Dictionary
@@ -10,7 +11,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.InputStream
+import java.util.zip.GZIPInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -56,10 +60,49 @@ class SudachiSegmenter @Inject constructor(
 
         if (!dictFile.exists()) {
             dictDir.mkdirs()
-            context.assets.open("sudachi/system_core.dic").use { input ->
-                dictFile.outputStream().use { output ->
-                    input.copyTo(output)
+            val tmpFile = File(dictDir, "system_core.dic.tmp")
+            if (tmpFile.exists()) {
+                tmpFile.delete()
+            }
+
+            val assetManager = context.assets
+            val legacyAssetPath = "sudachi/system_core.dic"
+
+            if (assetExists(assetManager, legacyAssetPath)) {
+                assetManager.open(legacyAssetPath).use { input ->
+                    tmpFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
+            } else {
+                val partAssets = findSplitGzipAssets(assetManager)
+                if (partAssets.isEmpty()) {
+                    throw IllegalStateException(
+                        "Sudachi dictionary assets missing. Expected either " +
+                            "\"$legacyAssetPath\" or split parts under assets/sudachi/ " +
+                            "named \"system_core.dic.gz.000\", \".001\", ..."
+                    )
+                }
+
+                val concatStream = AssetConcatInputStream(
+                    assetManager = assetManager,
+                    assetPaths = partAssets.map { "sudachi/$it" }
+                )
+
+                GZIPInputStream(BufferedInputStream(concatStream)).use { gzipInput ->
+                    tmpFile.outputStream().use { output ->
+                        gzipInput.copyTo(output)
+                    }
+                }
+            }
+
+            if (!tmpFile.renameTo(dictFile)) {
+                dictFile.outputStream().use { output ->
+                    tmpFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                tmpFile.delete()
             }
         }
 
@@ -70,8 +113,78 @@ class SudachiSegmenter @Inject constructor(
         }
 
         val config = Config.fromFile(configFile.toPath())
-        dictionary = DictionaryFactory().create(config)
-        tokenizer = dictionary!!.create()
+        val createdDictionary = DictionaryFactory().create(config)
+        dictionary = createdDictionary
+        tokenizer = createdDictionary.create()
+    }
+
+    private fun assetExists(assetManager: AssetManager, assetPath: String): Boolean {
+        return try {
+            assetManager.open(assetPath).use { }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun findSplitGzipAssets(assetManager: AssetManager): List<String> {
+        val prefix = "system_core.dic.gz."
+        val sudachiAssets = assetManager.list("sudachi")?.toList().orEmpty()
+
+        return sudachiAssets
+            .asSequence()
+            .filter { it.startsWith(prefix) }
+            .filter { it.length == prefix.length + 3 }
+            .filter { name ->
+                name.substring(prefix.length).all { it.isDigit() }
+            }
+            .sortedBy { name ->
+                name.substring(prefix.length).toInt()
+            }
+            .toList()
+    }
+
+    private class AssetConcatInputStream(
+        private val assetManager: AssetManager,
+        private val assetPaths: List<String>
+    ) : InputStream() {
+        private var currentIndex = 0
+        private var currentStream: InputStream? = null
+
+        override fun read(): Int {
+            while (true) {
+                val stream = ensureCurrentStream() ?: return -1
+                val value = stream.read()
+                if (value != -1) return value
+                closeCurrentStream()
+            }
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            while (true) {
+                val stream = ensureCurrentStream() ?: return -1
+                val count = stream.read(b, off, len)
+                if (count != -1) return count
+                closeCurrentStream()
+            }
+        }
+
+        override fun close() {
+            closeCurrentStream()
+        }
+
+        private fun ensureCurrentStream(): InputStream? {
+            if (currentStream != null) return currentStream
+            if (currentIndex >= assetPaths.size) return null
+            currentStream = assetManager.open(assetPaths[currentIndex])
+            return currentStream
+        }
+
+        private fun closeCurrentStream() {
+            currentStream?.close()
+            currentStream = null
+            currentIndex++
+        }
     }
 
     /**
