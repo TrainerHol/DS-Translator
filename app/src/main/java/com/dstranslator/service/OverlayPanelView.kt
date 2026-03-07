@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -87,6 +88,9 @@ class OverlayPanelView(
 
     /** Callback invoked when the user taps the minimize (X) button. */
     var onMinimize: (() -> Unit)? = null
+
+    /** Callback invoked when the user taps the switch-display button. */
+    var onSwitchDisplay: (() -> Unit)? = null
 
     // Mutable state for Compose UI indicators
     private var isPinned by mutableStateOf(initialConfig.isPinned)
@@ -249,6 +253,20 @@ class OverlayPanelView(
             horizontalArrangement = Arrangement.End
         ) {
             Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(
+                onClick = { onSwitchDisplay?.invoke() },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SwapHoriz,
+                    contentDescription = "Move panel to other display",
+                    tint = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(2.dp))
 
             // Pin toggle
             IconButton(

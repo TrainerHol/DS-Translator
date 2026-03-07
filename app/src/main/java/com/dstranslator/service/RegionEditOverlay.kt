@@ -130,6 +130,7 @@ class RegionEditOverlay(context: Context) : View(context) {
     private val addButtonRect = RectF()
     private val autoReadToggleRect = RectF()
     private val deleteButtonRect = RectF()
+    private val clearAllButtonRect = RectF()
 
     // --- Initialization ---
 
@@ -301,6 +302,11 @@ class RegionEditOverlay(context: Context) : View(context) {
             viewWidth / 2f + buttonSize / 2f, margin + buttonSize
         )
 
+        clearAllButtonRect.set(
+            margin, margin,
+            margin + buttonSize, margin + buttonSize
+        )
+
         // Auto-Read Toggle (bottom-center-left, only shown when region selected)
         autoReadToggleRect.set(
             viewWidth / 2f - buttonSize - margin / 2f, bottomY,
@@ -323,6 +329,10 @@ class RegionEditOverlay(context: Context) : View(context) {
 
         // Add Region button (+)
         drawButton(canvas, addButtonRect, "+")
+
+        if (regions.isNotEmpty()) {
+            drawButton(canvas, clearAllButtonRect, "CLR")
+        }
 
         // Only show auto-read toggle and delete when a region is selected
         if (selectedRegionIndex in regions.indices) {
@@ -539,6 +549,13 @@ class RegionEditOverlay(context: Context) : View(context) {
                 // Reset draw state to allow drawing another region
                 drawState = DrawState.Idle
                 selectedRegionIndex = -1
+                return true
+            }
+            clearAllButtonRect.contains(x, y) && regions.isNotEmpty() -> {
+                regions.clear()
+                selectedRegionIndex = -1
+                drawState = DrawState.Idle
+                tempRect = null
                 return true
             }
             autoReadToggleRect.contains(x, y) && selectedRegionIndex in regions.indices -> {

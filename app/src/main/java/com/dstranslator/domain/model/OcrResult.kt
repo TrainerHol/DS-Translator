@@ -13,6 +13,7 @@ package com.dstranslator.domain.model
  * @param preprocessedHeight Height of the preprocessed bitmap fed to OCR (may be upscaled).
  */
 data class OcrResult(
+    val displayId: Int? = null,
     val textBlocks: List<OcrTextBlock>,
     val captureRegion: CaptureRegion?,
     val preprocessedWidth: Int,

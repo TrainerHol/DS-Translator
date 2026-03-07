@@ -18,6 +18,7 @@ import android.view.WindowManager
 import android.widget.ImageView
 import com.dstranslator.R
 import com.dstranslator.data.settings.SettingsRepository
+import com.dstranslator.domain.model.CaptureScope
 import com.dstranslator.domain.model.PipelineState
 import com.dstranslator.domain.model.OverlayMode
 import com.dstranslator.ui.main.MainActivity
@@ -84,6 +85,9 @@ class FloatingButtonService : Service() {
     // Current display ID for screen switching
     private var currentDisplayId: Int = Display.DEFAULT_DISPLAY
 
+    // Current display ID for overlays (panel/labels) which may differ from bubble display
+    private var overlayDisplayId: Int = Display.DEFAULT_DISPLAY
+
     // Current display context for overlays on the active display
     private var currentDisplayContext: Context? = null
 
@@ -95,6 +99,8 @@ class FloatingButtonService : Service() {
 
     // Auto-read state tracking
     private var isAutoReadActive = false
+
+    private var currentCaptureScope: CaptureScope = CaptureScope.Both
 
     // Pending region edit flag: set when capture permission needs to be granted first
     private var pendingRegionEdit = false
@@ -135,6 +141,7 @@ class FloatingButtonService : Service() {
         val initialDisplay = displayManager.displays.firstOrNull { it.displayId == currentDisplayId }
             ?: displayManager.displays.firstOrNull()
         currentDisplayContext = if (initialDisplay != null) createDisplayContext(initialDisplay) else this
+        overlayDisplayId = currentDisplayId
         windowManager = (currentDisplayContext ?: this).getSystemService(WINDOW_SERVICE) as WindowManager
 
         // Inflate the expandable bubble menu layout
@@ -242,6 +249,26 @@ class FloatingButtonService : Service() {
             collapseMenu()
         }
 
+        btnScreenSwitch.setOnLongClickListener {
+            observerScope.launch(Dispatchers.IO) {
+                val nextScope = if (!hasMultipleDisplays) {
+                    when (currentCaptureScope) {
+                        CaptureScope.Both -> CaptureScope.Primary
+                        CaptureScope.Primary -> CaptureScope.Both
+                        CaptureScope.Secondary -> CaptureScope.Both
+                    }
+                } else {
+                    when (currentCaptureScope) {
+                        CaptureScope.Primary -> CaptureScope.Secondary
+                        CaptureScope.Secondary -> CaptureScope.Both
+                        CaptureScope.Both -> CaptureScope.Primary
+                    }
+                }
+                settingsRepository.setCaptureScope(nextScope)
+            }
+            true
+        }
+
         // Observe continuous mode state to change bubble appearance and button states.
         // When continuous capture is active: show stop button highlighted, dim start button.
         // When inactive: show start button normal, dim stop button.
@@ -268,6 +295,18 @@ class FloatingButtonService : Service() {
                 currentOverlayMode = mode
                 val bgRes = if (mode != OverlayMode.Off) R.drawable.bg_floating_button_active else R.drawable.bg_floating_button
                 btnOverlayMode.setBackgroundResource(bgRes)
+            }
+        }
+
+        observerScope.launch {
+            settingsRepository.captureScopeFlow().collect { scope ->
+                currentCaptureScope = scope
+                val bgRes = if (scope == CaptureScope.Both) {
+                    R.drawable.bg_floating_button_active
+                } else {
+                    R.drawable.bg_floating_button
+                }
+                btnScreenSwitch.setBackgroundResource(bgRes)
             }
         }
 
@@ -376,8 +415,9 @@ class FloatingButtonService : Service() {
         } else {
             // Create OverlayDisplayManager if not already active
             if (overlayDisplayManager == null) {
+                overlayDisplayId = currentDisplayId
                 val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-                val targetDisplay = displayManager.displays.firstOrNull { it.displayId == currentDisplayId }
+                val targetDisplay = displayManager.displays.firstOrNull { it.displayId == overlayDisplayId }
                     ?: displayManager.displays.first()
 
                 overlayDisplayManager = OverlayDisplayManager(
@@ -395,7 +435,8 @@ class FloatingButtonService : Service() {
                     onWordLookup = { word ->
                         CaptureService.jmdictRepositoryRef?.lookupWord(word.dictionaryForm) ?: emptyList()
                     },
-                    settingsRepository = settingsRepository
+                    settingsRepository = settingsRepository,
+                    onRequestSwitchDisplay = ::requestOverlaySwitchDisplay
                 )
             }
 
@@ -467,6 +508,7 @@ class FloatingButtonService : Service() {
 
         // Update current display tracking
         currentDisplayId = targetDisplay.displayId
+        overlayDisplayId = currentDisplayId
         hasMultipleDisplays = allDisplays.size >= 2
 
         // If overlay mode is active, recreate overlay on the new display
@@ -486,7 +528,8 @@ class FloatingButtonService : Service() {
                 onWordLookup = { word ->
                     CaptureService.jmdictRepositoryRef?.lookupWord(word.dictionaryForm) ?: emptyList()
                 },
-                settingsRepository = settingsRepository
+                settingsRepository = settingsRepository,
+                onRequestSwitchDisplay = ::requestOverlaySwitchDisplay
             )
             overlayDisplayManager?.switchMode(currentOverlayMode)
         }
@@ -565,14 +608,14 @@ class FloatingButtonService : Service() {
 
         // Load existing regions
         observerScope.launch {
-            val existingRegions = settingsRepository.getCaptureRegions()
+            val existingRegions = settingsRepository.getCaptureRegions(currentDisplayId)
             overlay.setExistingRegions(existingRegions)
         }
 
         // Set up confirm callback: save regions and remove overlay
         overlay.onRegionsConfirmed = { regions ->
             observerScope.launch {
-                settingsRepository.saveCaptureRegions(regions)
+                settingsRepository.saveCaptureRegions(currentDisplayId, regions)
             }
             removeRegionEditOverlay()
         }
@@ -597,6 +640,47 @@ class FloatingButtonService : Service() {
         windowManager.addView(overlay, overlayParams)
         regionEditOverlay = overlay
         updateActionButtonStates()
+    }
+
+    private fun requestOverlaySwitchDisplay() {
+        observerScope.launch {
+            switchOverlayDisplayOnly()
+        }
+    }
+
+    private suspend fun switchOverlayDisplayOnly() {
+        val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        val allDisplays = displayManager.displays
+        if (allDisplays.size < 2) return
+
+        val targetDisplay = allDisplays.firstOrNull { it.displayId != overlayDisplayId }
+            ?: allDisplays.firstOrNull()
+            ?: return
+
+        overlayDisplayManager?.cleanup()
+        overlayDisplayManager = null
+        overlayDisplayId = targetDisplay.displayId
+
+        overlayDisplayManager = OverlayDisplayManager(
+            service = this,
+            targetDisplay = targetDisplay,
+            translations = CaptureService.translations,
+            ocrResults = CaptureService.latestOcrResult,
+            onPlayAudio = { text ->
+                val intent = Intent(this, CaptureService::class.java).apply {
+                    action = CaptureService.ACTION_SPEAK
+                    putExtra(CaptureService.EXTRA_SPEAK_TEXT, text)
+                }
+                startService(intent)
+            },
+            onWordLookup = { word ->
+                CaptureService.jmdictRepositoryRef?.lookupWord(word.dictionaryForm) ?: emptyList()
+            },
+            settingsRepository = settingsRepository,
+            onRequestSwitchDisplay = ::requestOverlaySwitchDisplay
+        )
+
+        overlayDisplayManager?.switchMode(currentOverlayMode)
     }
 
     /**

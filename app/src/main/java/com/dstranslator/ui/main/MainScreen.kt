@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.dstranslator.domain.model.PipelineState
+import com.dstranslator.ui.presentation.TranslationListScreen
 
 /**
  * Primary app screen with start/stop capture controls, pipeline status display,
@@ -61,6 +62,9 @@ fun MainScreen(
             CapturingLayout(
                 pipelineState = pipelineState,
                 translationCount = translationCount,
+                translations = viewModel.translations,
+                onPlayAudio = viewModel::onPlayAudio,
+                onWordLookup = viewModel::onWordLookup,
                 onStopCapture = onStopCapture,
                 onNavigateToVocabulary = onNavigateToVocabulary,
                 onNavigateToSavedVocabulary = onNavigateToSavedVocabulary,
@@ -87,11 +91,16 @@ fun MainScreen(
 private fun CapturingLayout(
     pipelineState: PipelineState,
     translationCount: Int,
+    translations: kotlinx.coroutines.flow.StateFlow<List<com.dstranslator.domain.model.TranslationEntry>>,
+    onPlayAudio: (String) -> Unit,
+    onWordLookup: (suspend (com.dstranslator.domain.model.SegmentedWord) -> List<com.dstranslator.domain.model.DictionaryResult>)?,
     onStopCapture: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToVocabulary: () -> Unit,
     onNavigateToSavedVocabulary: () -> Unit
 ) {
+    val entries by translations.collectAsState()
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Compact top bar
         Surface(
@@ -166,11 +175,19 @@ private fun CapturingLayout(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Capturing… Open Captures to review.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (entries.isEmpty()) {
+                Text(
+                    text = "Capturing… waiting for text.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                TranslationListScreen(
+                    translations = translations,
+                    onPlayAudio = onPlayAudio,
+                    onWordLookup = onWordLookup
+                )
+            }
         }
     }
 }

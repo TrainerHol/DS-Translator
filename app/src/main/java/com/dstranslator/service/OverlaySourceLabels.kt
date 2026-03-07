@@ -64,8 +64,7 @@ class OverlaySourceLabels(
             val screenBounds = OverlayCoordinateMapper.mapToScreenCoordinates(block, ocrResult)
             if (screenBounds == ScreenBounds.EMPTY) continue
 
-            // Find matching translation entry by Japanese text
-            val entry = translations.find { it.japanese == block.text } ?: continue
+            val entry = findMatchingEntry(translations, block.text) ?: continue
 
             val labelView = SourceLabelView(displayContext).apply {
                 translationText = entry.english
@@ -100,6 +99,31 @@ class OverlaySourceLabels(
                 start()
             }
         }
+    }
+
+    private fun findMatchingEntry(
+        translations: List<TranslationEntry>,
+        blockText: String
+    ): TranslationEntry? {
+        val trimmedBlock = blockText.trim()
+        if (trimmedBlock.isBlank() || translations.isEmpty()) return null
+
+        for (i in translations.indices.reversed()) {
+            val entry = translations[i]
+            if (entry.japanese == blockText) return entry
+        }
+
+        for (i in translations.indices.reversed()) {
+            val entry = translations[i]
+            if (entry.japanese.lines().any { it.trim() == trimmedBlock }) return entry
+        }
+
+        for (i in translations.indices.reversed()) {
+            val entry = translations[i]
+            if (entry.japanese.contains(trimmedBlock)) return entry
+        }
+
+        return null
     }
 
     /**

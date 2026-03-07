@@ -2,6 +2,7 @@ package com.dstranslator.data.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.view.Display
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -15,6 +16,7 @@ import androidx.security.crypto.MasterKey
 import com.dstranslator.data.db.ProfileDao
 import com.dstranslator.data.db.ProfileEntity
 import com.dstranslator.domain.model.CaptureRegion
+import com.dstranslator.domain.model.CaptureScope
 import com.dstranslator.domain.model.OverlayConfig
 import com.dstranslator.domain.model.OverlayMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -227,74 +229,61 @@ class SettingsRepository @Inject constructor(
             prefs[PREF_REGION_H] = region.height
         }
         // Also save to multi-region storage (replaces default region)
-        val existing = getCaptureRegions().toMutableList()
+        val existing = getCaptureRegions(Display.DEFAULT_DISPLAY).toMutableList()
         val defaultIndex = existing.indexOfFirst { it.id == "default" || it.id == region.id }
         if (defaultIndex >= 0) {
             existing[defaultIndex] = region.copy(id = region.id.ifBlank { "default" })
         } else {
             existing.add(0, region.copy(id = if (region.id.isBlank()) "default" else region.id))
         }
-        saveCaptureRegions(existing)
+        saveCaptureRegions(Display.DEFAULT_DISPLAY, existing)
     }
 
     /**
      * Get all capture regions. Returns empty list if none configured.
      */
     suspend fun getCaptureRegions(): List<CaptureRegion> {
-        val json = context.dataStore.data
-            .map { prefs -> prefs[PREF_CAPTURE_REGIONS] }
-            .first() ?: return emptyList()
+        return getCaptureRegions(Display.DEFAULT_DISPLAY)
+    }
 
-        return try {
-            val array = JSONArray(json)
-            (0 until array.length()).map { i ->
-                val obj = array.getJSONObject(i)
-                val nx = obj.optDouble("nx", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
-                val ny = obj.optDouble("ny", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
-                val nw = obj.optDouble("nw", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
-                val nh = obj.optDouble("nh", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
-                CaptureRegion(
-                    x = obj.getInt("x"),
-                    y = obj.getInt("y"),
-                    width = obj.getInt("width"),
-                    height = obj.getInt("height"),
-                    id = obj.optString("id", "default"),
-                    label = obj.optString("label", ""),
-                    autoRead = obj.optBoolean("autoRead", false),
-                    normalizedX = nx,
-                    normalizedY = ny,
-                    normalizedWidth = nw,
-                    normalizedHeight = nh
-                )
-            }
-        } catch (e: Exception) {
-            emptyList()
+    suspend fun getCaptureRegions(displayId: Int): List<CaptureRegion> {
+        val perDisplayKey = captureRegionsKey(displayId)
+        val prefs = context.dataStore.data.first()
+        val perDisplayJson = prefs[perDisplayKey]
+        if (!perDisplayJson.isNullOrBlank()) {
+            return parseCaptureRegionsJson(perDisplayJson)
         }
+
+        if (displayId != Display.DEFAULT_DISPLAY) return emptyList()
+
+        val legacyJson = prefs[PREF_CAPTURE_REGIONS]
+        if (legacyJson.isNullOrBlank()) return emptyList()
+
+        val regions = parseCaptureRegionsJson(legacyJson)
+        if (regions.isNotEmpty()) {
+            context.dataStore.edit { editPrefs ->
+                editPrefs[perDisplayKey] = legacyJson
+            }
+        }
+
+        return regions
     }
 
     /**
      * Save all capture regions as a JSON array.
      */
     suspend fun saveCaptureRegions(regions: List<CaptureRegion>) {
-        val array = JSONArray()
-        regions.forEach { region ->
-            val obj = JSONObject().apply {
-                put("x", region.x)
-                put("y", region.y)
-                put("width", region.width)
-                put("height", region.height)
-                put("id", region.id)
-                put("label", region.label)
-                put("autoRead", region.autoRead)
-                region.normalizedX?.let { put("nx", it.toDouble()) }
-                region.normalizedY?.let { put("ny", it.toDouble()) }
-                region.normalizedWidth?.let { put("nw", it.toDouble()) }
-                region.normalizedHeight?.let { put("nh", it.toDouble()) }
-            }
-            array.put(obj)
-        }
+        saveCaptureRegions(Display.DEFAULT_DISPLAY, regions)
+    }
+
+    suspend fun saveCaptureRegions(displayId: Int, regions: List<CaptureRegion>) {
+        val json = serializeCaptureRegionsJson(regions)
+        val perDisplayKey = captureRegionsKey(displayId)
         context.dataStore.edit { prefs ->
-            prefs[PREF_CAPTURE_REGIONS] = array.toString()
+            prefs[perDisplayKey] = json
+            if (displayId == Display.DEFAULT_DISPLAY) {
+                prefs[PREF_CAPTURE_REGIONS] = json
+            }
         }
     }
 
@@ -302,12 +291,12 @@ class SettingsRepository @Inject constructor(
      * Add a new capture region.
      */
     suspend fun addCaptureRegion(region: CaptureRegion): CaptureRegion {
-        val regions = getCaptureRegions().toMutableList()
+        val regions = getCaptureRegions(Display.DEFAULT_DISPLAY).toMutableList()
         val newRegion = region.copy(
             id = if (region.id.isBlank()) java.util.UUID.randomUUID().toString() else region.id
         )
         regions.add(newRegion)
-        saveCaptureRegions(regions)
+        saveCaptureRegions(Display.DEFAULT_DISPLAY, regions)
         return newRegion
     }
 
@@ -315,9 +304,9 @@ class SettingsRepository @Inject constructor(
      * Remove a capture region by ID.
      */
     suspend fun removeCaptureRegion(regionId: String) {
-        val regions = getCaptureRegions().toMutableList()
+        val regions = getCaptureRegions(Display.DEFAULT_DISPLAY).toMutableList()
         regions.removeAll { it.id == regionId }
-        saveCaptureRegions(regions)
+        saveCaptureRegions(Display.DEFAULT_DISPLAY, regions)
     }
 
     suspend fun getFloatingButtonPosition(): Pair<Int, Int>? {
@@ -355,6 +344,23 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[PREF_CAPTURE_INTERVAL] = clamped
         }
+    }
+
+    suspend fun getCaptureScope(): CaptureScope {
+        return context.dataStore.data
+            .map { prefs -> CaptureScope.fromString(prefs[PREF_CAPTURE_SCOPE] ?: CaptureScope.Both.name) }
+            .first()
+    }
+
+    suspend fun setCaptureScope(scope: CaptureScope) {
+        context.dataStore.edit { prefs ->
+            prefs[PREF_CAPTURE_SCOPE] = scope.name
+        }
+    }
+
+    fun captureScopeFlow(): Flow<CaptureScope> {
+        return context.dataStore.data
+            .map { prefs -> CaptureScope.fromString(prefs[PREF_CAPTURE_SCOPE] ?: CaptureScope.Both.name) }
     }
 
     // --- Auto-read settings ---
@@ -506,6 +512,7 @@ class SettingsRepository @Inject constructor(
             prefs[PREF_OVERLAY_CONFIG_SECONDARY] = settings.optString("overlayConfigSecondary", "")
             prefs[PREF_OVERLAY_DISMISS_PRESENTATION] = settings.optBoolean("dismissPresentation", true)
             prefs[PREF_CAPTURE_REGIONS] = captureRegionsJson
+            prefs[captureRegionsKey(Display.DEFAULT_DISPLAY)] = captureRegionsJson
         }
     }
 
@@ -514,6 +521,10 @@ class SettingsRepository @Inject constructor(
      */
     suspend fun createCaptureRegionsSnapshot(): String {
         val regions = getCaptureRegions()
+        return serializeCaptureRegionsJson(regions)
+    }
+
+    private fun serializeCaptureRegionsJson(regions: List<CaptureRegion>): String {
         val array = JSONArray()
         regions.forEach { region ->
             val obj = JSONObject().apply {
@@ -532,6 +543,38 @@ class SettingsRepository @Inject constructor(
             array.put(obj)
         }
         return array.toString()
+    }
+
+    private fun parseCaptureRegionsJson(json: String): List<CaptureRegion> {
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                val nx = obj.optDouble("nx", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                val ny = obj.optDouble("ny", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                val nw = obj.optDouble("nw", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                val nh = obj.optDouble("nh", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
+                CaptureRegion(
+                    x = obj.getInt("x"),
+                    y = obj.getInt("y"),
+                    width = obj.getInt("width"),
+                    height = obj.getInt("height"),
+                    id = obj.optString("id", "default"),
+                    label = obj.optString("label", ""),
+                    autoRead = obj.optBoolean("autoRead", false),
+                    normalizedX = nx,
+                    normalizedY = ny,
+                    normalizedWidth = nw,
+                    normalizedHeight = nh
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun captureRegionsKey(displayId: Int): Preferences.Key<String> {
+        return stringPreferencesKey("capture_regions_display_$displayId")
     }
 
     /**
@@ -614,6 +657,7 @@ class SettingsRepository @Inject constructor(
         private val PREF_BUTTON_X = intPreferencesKey("floating_button_x")
         private val PREF_BUTTON_Y = intPreferencesKey("floating_button_y")
         private val PREF_CAPTURE_INTERVAL = longPreferencesKey("capture_interval_ms")
+        private val PREF_CAPTURE_SCOPE = stringPreferencesKey("capture_scope")
         private val PREF_OPENAI_BASE_URL = stringPreferencesKey("openai_base_url")
         private val PREF_OPENAI_MODEL = stringPreferencesKey("openai_model")
         private val PREF_TRANSLATION_ENGINE = stringPreferencesKey("translation_engine")

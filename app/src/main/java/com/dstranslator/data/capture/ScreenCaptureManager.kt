@@ -6,6 +6,7 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
+import android.view.Display
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -22,10 +23,14 @@ import javax.inject.Singleton
 @Singleton
 class ScreenCaptureManager @Inject constructor() {
 
-    private var imageReader: ImageReader? = null
-    private var virtualDisplay: VirtualDisplay? = null
-    private var screenWidth: Int = 0
-    private var screenHeight: Int = 0
+    private data class CaptureTarget(
+        val imageReader: ImageReader,
+        val virtualDisplay: VirtualDisplay,
+        val screenWidth: Int,
+        val screenHeight: Int
+    )
+
+    private val targets = mutableMapOf<Int, CaptureTarget>()
 
     /**
      * Set up the ImageReader and VirtualDisplay for screen capture.
@@ -39,21 +44,35 @@ class ScreenCaptureManager @Inject constructor() {
      *                  this parameter is reserved for future multi-display capture support.
      */
     fun setup(mediaProjection: MediaProjection, width: Int, height: Int, density: Int, displayId: Int? = null) {
-        screenWidth = width
-        screenHeight = height
+        val targetDisplayId = displayId ?: Display.DEFAULT_DISPLAY
+        targets[targetDisplayId]?.let { existing ->
+            existing.virtualDisplay.release()
+            existing.imageReader.close()
+        }
 
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
 
-        virtualDisplay = mediaProjection.createVirtualDisplay(
-            "DSTranslator",
+        val virtualDisplay = mediaProjection.createVirtualDisplay(
+            "DSTranslator-$targetDisplayId",
             width,
             height,
             density,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader!!.surface,
+            imageReader.surface,
             null,
             null
         )
+
+        targets[targetDisplayId] = CaptureTarget(
+            imageReader = imageReader,
+            virtualDisplay = virtualDisplay,
+            screenWidth = width,
+            screenHeight = height
+        )
+    }
+
+    fun hasTarget(displayId: Int): Boolean {
+        return targets.containsKey(displayId)
     }
 
     /**
@@ -62,8 +81,10 @@ class ScreenCaptureManager @Inject constructor() {
      *
      * @return The captured Bitmap, or null if acquisition fails
      */
-    suspend fun acquireScreenshot(): Bitmap? = withContext(Dispatchers.IO) {
-        val reader = imageReader ?: return@withContext null
+    suspend fun acquireScreenshot(displayId: Int? = null): Bitmap? = withContext(Dispatchers.IO) {
+        val targetDisplayId = displayId ?: Display.DEFAULT_DISPLAY
+        val target = targets[targetDisplayId] ?: return@withContext null
+        val reader = target.imageReader
         var image: android.media.Image? = null
         try {
             image = reader.acquireLatestImage() ?: return@withContext null
@@ -72,16 +93,16 @@ class ScreenCaptureManager @Inject constructor() {
             val buffer = plane.buffer
             val pixelStride = plane.pixelStride
             val rowStride = plane.rowStride
-            val rowPadding = rowStride - pixelStride * screenWidth
+            val rowPadding = rowStride - pixelStride * target.screenWidth
 
             // Create bitmap with padding included, then crop to actual size
-            val bitmapWidth = screenWidth + rowPadding / pixelStride
-            val paddedBitmap = Bitmap.createBitmap(bitmapWidth, screenHeight, Bitmap.Config.ARGB_8888)
+            val bitmapWidth = target.screenWidth + rowPadding / pixelStride
+            val paddedBitmap = Bitmap.createBitmap(bitmapWidth, target.screenHeight, Bitmap.Config.ARGB_8888)
             paddedBitmap.copyPixelsFromBuffer(buffer)
 
             // Crop to actual screen width (remove row padding)
-            if (bitmapWidth != screenWidth) {
-                val cropped = Bitmap.createBitmap(paddedBitmap, 0, 0, screenWidth, screenHeight)
+            if (bitmapWidth != target.screenWidth) {
+                val cropped = Bitmap.createBitmap(paddedBitmap, 0, 0, target.screenWidth, target.screenHeight)
                 paddedBitmap.recycle()
                 cropped
             } else {
@@ -98,9 +119,10 @@ class ScreenCaptureManager @Inject constructor() {
      * Release the virtual display and image reader resources.
      */
     fun release() {
-        virtualDisplay?.release()
-        virtualDisplay = null
-        imageReader?.close()
-        imageReader = null
+        for ((_, target) in targets) {
+            target.virtualDisplay.release()
+            target.imageReader.close()
+        }
+        targets.clear()
     }
 }

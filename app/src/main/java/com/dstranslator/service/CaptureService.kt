@@ -29,6 +29,7 @@ import com.dstranslator.data.translation.TranslationManager
 import com.dstranslator.data.tts.TtsManager
 import com.dstranslator.domain.engine.OcrEngine
 import com.dstranslator.domain.model.CaptureRegion
+import com.dstranslator.domain.model.CaptureScope
 import com.dstranslator.domain.model.OcrResult
 import com.dstranslator.domain.model.OcrTextBlock
 import com.dstranslator.domain.model.PipelineState
@@ -85,7 +86,8 @@ class CaptureService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var continuousCaptureJob: Job? = null
-    private var previousOcrText: String = ""
+    private val previousOcrTextsByDisplay = mutableMapOf<Int, String>()
+    private val screenshotFailuresByDisplay = mutableMapOf<Int, Int>()
     private var currentSessionId: String = UUID.randomUUID().toString()
 
     /** Per-region text tracking for auto-read (replaces global previousOcrText for auto-read decisions) */
@@ -145,13 +147,19 @@ class CaptureService : Service() {
         val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = projectionManager.getMediaProjection(resultCode, data)
         mediaProjection?.registerCallback(projectionCallback, null)
+        val projection = mediaProjection
+        if (projection == null) {
+            Log.e(TAG, "Failed to obtain MediaProjection")
+            stopSelf()
+            return
+        }
 
         // Set up screen capture
         val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         windowManager.defaultDisplay.getRealMetrics(metrics)
-        screenCaptureManager.setup(mediaProjection!!, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi)
+        screenCaptureManager.setup(projection, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi)
 
         // Expose capture manager for region setup screenshots
         screenCaptureManagerRef = screenCaptureManager
@@ -382,11 +390,48 @@ class CaptureService : Service() {
         }
 
         try {
-        try {
             _pipelineState.value = PipelineState.Capturing
 
-            val bitmap = screenCaptureManager.acquireScreenshot()
-            if (bitmap == null) {
+            val projection = mediaProjection
+            if (projection == null) {
+                _pipelineState.value = PipelineState.Error("Screen capture permission not available")
+                return
+            }
+
+            val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            val allDisplays = displayManager.displays.toList()
+            val primaryDisplay = allDisplays.firstOrNull { it.displayId == Display.DEFAULT_DISPLAY }
+            val secondaryDisplay = allDisplays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }
+            val captureScope = settingsRepository.getCaptureScope()
+
+            val targetDisplays = when (captureScope) {
+                CaptureScope.Primary -> listOfNotNull(primaryDisplay)
+                CaptureScope.Secondary -> listOfNotNull(secondaryDisplay ?: primaryDisplay)
+                CaptureScope.Both -> listOfNotNull(primaryDisplay, secondaryDisplay).distinctBy { it.displayId }
+            }
+
+            if (targetDisplays.isEmpty()) {
+                _pipelineState.value = PipelineState.Error("No displays available for capture")
+                return
+            }
+
+            _pipelineState.value = PipelineState.Processing
+
+            var anySucceeded = false
+            for (display in targetDisplays) {
+                val bitmap = acquireScreenshotForDisplay(projection, display)
+                if (bitmap == null) {
+                    continue
+                }
+                anySucceeded = true
+                try {
+                    captureAndTranslateBitmap(display.displayId, bitmap)
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+
+            if (!anySucceeded) {
                 if (_isContinuousActive.value) {
                     continuousCaptureJob?.cancel()
                     continuousCaptureJob = null
@@ -396,150 +441,7 @@ class CaptureService : Service() {
                 return
             }
 
-            _pipelineState.value = PipelineState.Processing
-
-            // Get all capture regions; fall back to single region or full screen
-            val multiRegions = settingsRepository.getCaptureRegions()
-            val regions: List<CaptureRegion?> = if (multiRegions.isNotEmpty()) {
-                multiRegions
-            } else {
-                val single = settingsRepository.getCaptureRegion()
-                if (single != null) listOf(single) else listOf(null)
-            }
-
-            // Collect text blocks from all regions, tracking per-region text for auto-read
-            val allTextBlocks = mutableListOf<OcrTextBlock>()
-            val preprocessedBitmaps = mutableListOf<android.graphics.Bitmap>()
-            val regionTextMap = mutableMapOf<String, String>()
-
-            val resolvedRegions = regions.map { region ->
-                region?.resolveForBitmap(bitmap.width, bitmap.height)
-            }
-
-            for (region in resolvedRegions) {
-                val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
-                preprocessedBitmaps.add(preprocessed)
-                val textBlocks = ocrVotingService.recognizeWithVoting(preprocessed, runs = 3)
-                allTextBlocks.addAll(textBlocks)
-                // Track per-region OCR text for auto-read
-                if (region != null) {
-                    regionTextMap[region.id] = textBlocks.joinToString("") { it.text }.trim()
-                }
-            }
-
-            // Publish OCR result with coordinate metadata for overlay-on-source positioning
-            _latestOcrResult.value = OcrResult(
-                textBlocks = allTextBlocks.toList(),
-                captureRegion = resolvedRegions.firstOrNull(),
-                preprocessedWidth = preprocessedBitmaps.firstOrNull()?.width ?: 0,
-                preprocessedHeight = preprocessedBitmaps.firstOrNull()?.height ?: 0
-            )
-
-            val currentText = allTextBlocks.joinToString("\n") { it.text }.trim()
-
-            // Change detection: skip if text is too similar to previous OCR result.
-            // Uses similarity ratio instead of exact match to handle OCR flicker where
-            // the engine intermittently misses characters (e.g., "ABC" vs "AB"), which
-            // would otherwise trigger repeated translations of essentially the same text.
-            if (currentText.isBlank() || isSimilarText(currentText, previousOcrText)) {
-                _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
-                // Recycle bitmaps
-                preprocessedBitmaps.forEach { pp ->
-                    if (pp !== bitmap) pp.recycle()
-                }
-                bitmap.recycle()
-                return
-            }
-            previousOcrText = currentText
-
-            // Merge all text blocks into a single combined text for the region.
-            // ML Kit often fragments dialogue into multiple blocks (e.g., character name
-            // in one block, dialogue text in another). Translating fragments individually
-            // produces nonsensical results. Merging preserves context for accurate translation.
-            val combinedText = allTextBlocks
-                .map { it.text.trim() }
-                .filter { it.isNotBlank() }
-                .joinToString("\n")
-
-            if (combinedText.isBlank()) {
-                _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
-                preprocessedBitmaps.forEach { pp -> if (pp !== bitmap) pp.recycle() }
-                bitmap.recycle()
-                return
-            }
-
-            val translation = translationManager.translate(combinedText)
-
-            // Segment combined Japanese text and resolve furigana (graceful degradation)
-            val segmentedWords = try {
-                if (sudachiSegmenter.ensureInitialized()) {
-                    sudachiSegmenter.segment(combinedText)
-                } else {
-                    emptyList()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Segmentation failed", e)
-                emptyList()
-            }
-
-            val furiganaSegments = if (segmentedWords.isNotEmpty()) {
-                try {
-                    furiganaResolver.resolve(segmentedWords)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Furigana resolution failed", e)
-                    emptyList()
-                }
-            } else emptyList()
-
-            val entry = TranslationEntry(
-                japanese = combinedText,
-                english = translation,
-                sessionId = currentSessionId,
-                segmentedWords = segmentedWords,
-                furiganaSegments = furiganaSegments
-            )
-
-            // Persist to history (per-session, persisted to Room)
-            translationHistoryDao.insert(
-                TranslationHistoryEntity(
-                    sessionId = currentSessionId,
-                    sourceText = combinedText,
-                    translatedText = translation,
-                    timestamp = System.currentTimeMillis()
-                )
-            )
-
-            // Directly update translations list with the entry that includes
-            // furigana and segmentation data. Room Flow collection does NOT
-            // store segmentation data, so we must update manually.
-            val currentEntries = _translations.value.toMutableList()
-            currentEntries.add(entry)
-            _translations.value = currentEntries
-
-            // Auto-read hook: check each region for text changes and speak via TTS
-            val autoReadEnabled = settingsRepository.getAutoReadEnabled()
-            if (autoReadEnabled) {
-                val flushMode = settingsRepository.getAutoReadFlushMode()
-                val queueMode = AutoReadHelper.getQueueMode(flushMode)
-                for (region in resolvedRegions) {
-                    if (region != null) {
-                        val regionText = regionTextMap[region.id] ?: ""
-                        val previousText = previousRegionTexts[region.id]
-                        if (AutoReadHelper.shouldAutoRead(region, regionText, previousText, autoReadEnabled)) {
-                            previousRegionTexts[region.id] = regionText
-                            ttsManager.speak(regionText, queueMode)
-                        }
-                    }
-                }
-            }
-
             _pipelineState.value = if (_isContinuousActive.value) PipelineState.ContinuousActive else PipelineState.Done
-
-            // Recycle bitmaps
-            preprocessedBitmaps.forEach { pp ->
-                if (pp !== bitmap) pp.recycle()
-            }
-            bitmap.recycle()
         } catch (e: Exception) {
             Log.e(TAG, "Pipeline error", e)
             _pipelineState.value = PipelineState.Error("Pipeline error: ${e.message}")
@@ -549,13 +451,168 @@ class CaptureService : Service() {
         }
     }
 
+    private fun getDisplayMetrics(display: Display): DisplayMetrics {
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(metrics)
+        return metrics
+    }
+
+    private suspend fun acquireScreenshotForDisplay(
+        projection: MediaProjection,
+        display: Display
+    ): android.graphics.Bitmap? {
+        val previousFailures = screenshotFailuresByDisplay[display.displayId] ?: 0
+        if (previousFailures >= MAX_SCREENSHOT_FAILURES_PER_DISPLAY) return null
+
+        if (!screenCaptureManager.hasTarget(display.displayId)) {
+            val metrics = getDisplayMetrics(display)
+            screenCaptureManager.setup(
+                projection,
+                metrics.widthPixels,
+                metrics.heightPixels,
+                metrics.densityDpi,
+                display.displayId
+            )
+        }
+        val bitmap = screenCaptureManager.acquireScreenshot(display.displayId)
+        if (bitmap == null) {
+            screenshotFailuresByDisplay[display.displayId] = previousFailures + 1
+        } else {
+            screenshotFailuresByDisplay[display.displayId] = 0
+        }
+        return bitmap
+    }
+
+    private suspend fun captureAndTranslateBitmap(displayId: Int, bitmap: android.graphics.Bitmap) {
+        // Get all capture regions for this display; fall back to single region or full screen
+        val multiRegions = settingsRepository.getCaptureRegions(displayId)
+        val regions: List<CaptureRegion?> = if (multiRegions.isNotEmpty()) {
+            multiRegions
+        } else {
+            val single = if (displayId == Display.DEFAULT_DISPLAY) settingsRepository.getCaptureRegion() else null
+            if (single != null) listOf(single) else listOf(null)
+        }
+
+        val allTextBlocks = mutableListOf<OcrTextBlock>()
+        val preprocessedBitmaps = mutableListOf<android.graphics.Bitmap>()
+        val regionTextMap = mutableMapOf<String, String>()
+
+        val resolvedRegions = regions.map { region ->
+            region?.resolveForBitmap(bitmap.width, bitmap.height)
+        }
+
+        for (region in resolvedRegions) {
+            val preprocessed = ocrPreprocessor.preprocess(bitmap, region)
+            preprocessedBitmaps.add(preprocessed)
+            val textBlocks = ocrVotingService.recognizeWithVoting(preprocessed, runs = 3)
+            allTextBlocks.addAll(textBlocks)
+            if (region != null) {
+                regionTextMap["$displayId:${region.id}"] = textBlocks.joinToString("") { it.text }.trim()
+            }
+        }
+
+        _latestOcrResult.value = OcrResult(
+            displayId = displayId,
+            textBlocks = allTextBlocks.toList(),
+            captureRegion = resolvedRegions.firstOrNull(),
+            preprocessedWidth = preprocessedBitmaps.firstOrNull()?.width ?: 0,
+            preprocessedHeight = preprocessedBitmaps.firstOrNull()?.height ?: 0
+        )
+
+        val currentText = allTextBlocks.joinToString("\n") { it.text }.trim()
+        val previousOcrText = previousOcrTextsByDisplay[displayId] ?: ""
+        if (currentText.isBlank() || isSimilarText(currentText, previousOcrText)) {
+            preprocessedBitmaps.forEach { pp ->
+                if (pp !== bitmap) pp.recycle()
+            }
+            return
+        }
+        previousOcrTextsByDisplay[displayId] = currentText
+
+        val combinedText = allTextBlocks
+            .map { it.text.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+
+        if (combinedText.isBlank()) {
+            preprocessedBitmaps.forEach { pp -> if (pp !== bitmap) pp.recycle() }
+            return
+        }
+
+        val translation = translationManager.translate(combinedText)
+
+        val segmentedWords = try {
+            if (sudachiSegmenter.ensureInitialized()) {
+                sudachiSegmenter.segment(combinedText)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Segmentation failed", e)
+            emptyList()
+        }
+
+        val furiganaSegments = if (segmentedWords.isNotEmpty()) {
+            try {
+                furiganaResolver.resolve(segmentedWords)
+            } catch (e: Exception) {
+                Log.w(TAG, "Furigana resolution failed", e)
+                emptyList()
+            }
+        } else emptyList()
+
+        val entry = TranslationEntry(
+            japanese = combinedText,
+            english = translation,
+            sessionId = currentSessionId,
+            segmentedWords = segmentedWords,
+            furiganaSegments = furiganaSegments
+        )
+
+        translationHistoryDao.insert(
+            TranslationHistoryEntity(
+                sessionId = currentSessionId,
+                sourceText = combinedText,
+                translatedText = translation,
+                timestamp = System.currentTimeMillis()
+            )
+        )
+
+        val currentEntries = _translations.value.toMutableList()
+        currentEntries.add(entry)
+        _translations.value = currentEntries
+
+        val autoReadEnabled = settingsRepository.getAutoReadEnabled()
+        if (autoReadEnabled) {
+            val flushMode = settingsRepository.getAutoReadFlushMode()
+            val queueMode = AutoReadHelper.getQueueMode(flushMode)
+            for (region in resolvedRegions) {
+                if (region != null) {
+                    val key = "$displayId:${region.id}"
+                    val regionText = regionTextMap[key] ?: ""
+                    val previousText = previousRegionTexts[key]
+                    if (AutoReadHelper.shouldAutoRead(region, regionText, previousText, autoReadEnabled)) {
+                        previousRegionTexts[key] = regionText
+                        ttsManager.speak(regionText, queueMode)
+                    }
+                }
+            }
+        }
+
+        preprocessedBitmaps.forEach { pp ->
+            if (pp !== bitmap) pp.recycle()
+        }
+    }
+
     /**
      * Start continuous capture mode. Cancels any existing continuous job first.
      * Uses while(isActive) + delay(interval) pattern to prevent overlapping captures.
      */
     private fun startContinuousCapture() {
         continuousCaptureJob?.cancel()
-        previousOcrText = ""  // Reset change detection
+        previousOcrTextsByDisplay.clear()
+        screenshotFailuresByDisplay.clear()
         previousRegionTexts.clear()  // Reset per-region auto-read tracking
         _isContinuousActive.value = true
         _currentSessionId.value = currentSessionId
@@ -641,6 +698,7 @@ class CaptureService : Service() {
 
     companion object {
         private const val TAG = "CaptureService"
+        private const val MAX_SCREENSHOT_FAILURES_PER_DISPLAY = 3
 
         /**
          * Similarity threshold for OCR change detection.

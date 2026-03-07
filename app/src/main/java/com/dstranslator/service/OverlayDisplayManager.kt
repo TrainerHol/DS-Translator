@@ -32,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -68,7 +69,8 @@ class OverlayDisplayManager(
     private val ocrResults: StateFlow<OcrResult?>,
     private val onPlayAudio: (String) -> Unit,
     private val onWordLookup: (suspend (SegmentedWord) -> List<DictionaryResult>)?,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val onRequestSwitchDisplay: (() -> Unit)? = null
 ) {
     // Display context and window manager for the target display
     private val displayContext: Context = service.createDisplayContext(targetDisplay)
@@ -143,6 +145,10 @@ class OverlayDisplayManager(
             hidePanel()
         }
 
+        panel.onSwitchDisplay = {
+            onRequestSwitchDisplay?.invoke()
+        }
+
         panel.show()
         panelView = panel
         currentMode = OverlayMode.Panel
@@ -175,13 +181,21 @@ class OverlayDisplayManager(
             }
         )
 
-        // Start collecting OCR results to update labels
+        // Start collecting OCR results + translations to update labels
         ocrCollectionJob = scope.launch {
-            ocrResults.collect { result ->
-                if (result != null) {
-                    sourceLabels?.showLabels(result, translations.value)
+            var lastOcrForDisplay: OcrResult? = null
+            combine(ocrResults, translations) { ocr, entries -> ocr to entries }
+                .collect { (result, entries) ->
+                    if (result != null) {
+                        if (result.displayId == null || result.displayId == targetDisplay.displayId) {
+                            lastOcrForDisplay = result
+                        }
+                    }
+                    val usableOcr = lastOcrForDisplay
+                    if (usableOcr != null) {
+                        sourceLabels?.showLabels(usableOcr, entries)
+                    }
                 }
-            }
         }
 
         currentMode = OverlayMode.OverlayOnSource
