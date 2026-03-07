@@ -5,6 +5,10 @@ A dual screen translator for the AYN Thor
 
 APKs are built and published automatically when the version changes on the `main` branch.
 
+## Bundled dependencies
+
+This project intentionally commits the binary dependency `app/libs/sherpa-onnx-1.12.28.aar` so GitHub Actions can build release APKs without extra download steps.
+
 ### Quick release (manual trigger)
 
 Go to **Actions** > **Build & Release APK** > **Run workflow**. This auto-bumps the version by `0.01` (e.g. `1.0` -> `1.01`), commits, builds, and creates a GitHub Release.

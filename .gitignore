@@ -37,3 +37,4 @@ google-services.json
 # Large model/binary files (managed outside git)
 app/src/main/assets/sherpa-onnx-kokoro/
 app/libs/*.aar
+!app/libs/sherpa-onnx-1.12.28.aar
